@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customers — CJ Gifts Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body class="admin-body">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebar"></aside>
+  <main class="admin-main">
+    <div class="admin-topbar"><h1>Customers</h1></div>
+
+    <div class="admin-panel">
+      <div class="toolbar" style="margin-bottom:20px;">
+        <input type="search" id="adminCustomerSearch" placeholder="Search by name or email..." style="padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;min-width:260px;">
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Orders</th><th>Total Spent</th><th>Joined</th></tr></thead>
+        <tbody id="adminCustomersBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../assets/js/admin.js"></script>
+<script>
+  initAdminCustomersPage();
+</script>
+</body>
+</html>
