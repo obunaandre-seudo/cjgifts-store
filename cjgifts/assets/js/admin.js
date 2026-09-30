@@ -45,6 +45,22 @@ async function adminLogout() {
   window.location.href = '../login.html';
 }
 
+function adminEscapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+
+function orderItemsHTML(order) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (!items.length) return '<span class="order-items-empty">Item details unavailable</span>';
+  return `<ul class="order-item-list">${items.map(item => {
+    const name = adminEscapeHTML(item.name || item.product?.name || 'Gift');
+    const quantity = Number(item.quantity ?? item.qty ?? 1);
+    return `<li><span>${name}</span><strong>×${Number.isFinite(quantity) ? quantity : 1}</strong></li>`;
+  }).join('')}</ul>`;
+}
+
 async function refreshAdminProducts() {
   const response = await fetch('/api/admin/products', { credentials: 'same-origin' });
   const result = await response.json();
@@ -74,10 +90,11 @@ async function initAdminDashboard() {
     <tr>
       <td><strong>${o.orderNumber}</strong></td>
       <td>${o.customer.name}</td>
+      <td>${orderItemsHTML(o)}</td>
       <td>${new Date(o.createdAt).toLocaleDateString()}</td>
       <td>${formatPrice(o.total)}</td>
       <td><span class="badge ${o.status.toLowerCase()}">${o.status}</span></td>
-    </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--gray-600);padding:30px;">No orders yet</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:30px;">No orders yet</td></tr>`;
 
   const recentProducts = [...products].sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
   document.getElementById('recentProductsBody').innerHTML = recentProducts.length ? recentProducts.map(p => `
@@ -296,7 +313,7 @@ function renderAdminOrdersTable() {
     <tr>
       <td><strong>${o.orderNumber}</strong></td>
       <td>${o.customer.name}<br><span style="font-size:12px;color:var(--gray-600);">${o.customer.email}</span></td>
-      <td>${o.items.length} item(s)</td>
+      <td>${orderItemsHTML(o)}</td>
       <td>${formatPrice(o.total)}</td>
       <td><span class="badge paid">${o.paymentStatus}</span></td>
       <td>

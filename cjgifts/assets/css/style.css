@@ -523,6 +523,11 @@ input,select,textarea{font-family:inherit;}
 .stat-card .stat-label{font-size:13px;color:var(--gray-600);}
 
 .admin-panel{background:#fff;border-radius:var(--radius);border:1px solid var(--gray-200);padding:26px;margin-bottom:26px;}
+.order-item-list{display:grid;gap:4px;min-width:150px;margin:0;padding:0;list-style:none;}
+.order-item-list li{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;font-size:12.5px;line-height:1.4;}
+.order-item-list li span{min-width:0;overflow-wrap:anywhere;}
+.order-item-list li strong{flex:none;color:var(--gray-600);font-size:12px;}
+.order-items-empty{font-size:12px;color:var(--gray-600);}
 .admin-panel h3{font-size:17px;margin-bottom:18px;}
 .data-table{width:100%;border-collapse:collapse;}
 .data-table th{text-align:left;font-size:12px;text-transform:uppercase;color:var(--gray-600);letter-spacing:.6px;padding:10px;border-bottom:2px solid var(--gray-200);}
