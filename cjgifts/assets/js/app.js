@@ -417,7 +417,7 @@ function fieldRequired(id) {
   return true;
 }
 
-function submitOrder(items, subtotal, discount, shipping) {
+async function submitOrder(items, subtotal, discount, shipping) {
   const requiredFields = ['coFullName','coEmail','coPhone','coAddress','coCity','coState','coCountry'];
   let valid = true;
   requiredFields.forEach(id => { if (!fieldRequired(id)) valid = false; });
@@ -437,50 +437,83 @@ function submitOrder(items, subtotal, discount, shipping) {
   if (!valid) { showToast('Please fix the highlighted fields'); return; }
 
   const btn = document.getElementById('placeOrderBtn');
+  const originalLabel = btn.textContent;
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span> Processing payment...`;
-
-  setTimeout(() => {
-    // deduct stock
-    items.forEach(i => {
-      const fresh = Products.byId(i.productId);
-      fresh.stock = Math.max(0, fresh.stock - i.qty);
-      Products.save(fresh);
-    });
-
-    const user = Auth.currentUser();
-    const order = {
-      id: 'o' + Date.now(),
-      orderNumber: Orders.newOrderNumber(),
-      userId: user ? user.id : null,
-      customer: {
-        name: document.getElementById('coFullName').value,
-        email: document.getElementById('coEmail').value,
-        phone: document.getElementById('coPhone').value
-      },
-      shipping: {
-        address: document.getElementById('coAddress').value,
-        city: document.getElementById('coCity').value,
-        state: document.getElementById('coState').value,
-        country: document.getElementById('coCountry').value,
-        postal: document.getElementById('coPostal').value
-      },
-      items: items.map(i => ({
-        productId: i.productId, name: i.product.name, image: i.product.images[0],
-        variant: i.variant, qty: i.qty, price: i.unitPrice
-      })),
-      subtotal: subtotal + discount,
-      discount, shipping,
-      total: subtotal + shipping,
-      paymentStatus: 'Paid',
-      status: 'Processing',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+  btn.innerHTML = `<span class="spinner"></span> Saving your order...`;
+  let order = null;
+  let callbackUrl = '';
+  try {
+    const customer = {
+      name: document.getElementById('coFullName').value.trim(),
+      email: email.trim().toLowerCase(),
+      phone: document.getElementById('coPhone').value.trim()
     };
+    const address = {
+      street: document.getElementById('coAddress').value.trim(),
+      city: document.getElementById('coCity').value.trim(),
+      region: document.getElementById('coState').value.trim(),
+      country: document.getElementById('coCountry').value.trim(),
+      postalCode: document.getElementById('coPostal').value.trim()
+    };
+    const response = await fetch('/api/orders', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer,
+        recipient: { name: customer.name, phone: customer.phone },
+        delivery: address,
+        items: items.map(item => ({
+          productId: item.productId,
+          quantity: item.qty,
+          name: item.product.name,
+          unitPrice: Number(item.unitPrice)
+        })),
+        shippingMethod: 'Standard',
+        currency: 'USD'
+      })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save your order.');
+    order = result.order;
     Orders.create(order);
     Cart.clear();
-    window.location.href = 'order-success.html?order=' + order.id;
-  }, 1400);
+    callbackUrl = new URL(`order-success.html?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(order.accessToken)}`, window.location.href).href;
+    await Products.refreshFromServer().catch(() => {});
+
+    const paymentResponse = await fetch('/api/payments/initiate', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken, callbackUrl })
+    });
+    const payment = await paymentResponse.json();
+    if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Order saved, but payment could not be started.');
+
+    if (payment.mock || payment.alreadyPaid) {
+      if (payment.mock) {
+        const verifyResponse = await fetch('/api/payments/verify', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken, reference: payment.reference })
+        });
+        const verified = await verifyResponse.json();
+        if (!verifyResponse.ok || !verified.ok) throw new Error(verified.message || 'Order saved; payment is still pending.');
+        order = verified.order;
+        Orders.create(order);
+      }
+      window.location.href = callbackUrl;
+      return;
+    }
+
+    window.location.href = payment.authorizationUrl;
+  } catch (error) {
+    if (order) {
+      window.location.href = callbackUrl;
+      return;
+    }
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    showToast(error.message || 'Unable to place your order. Please try again.');
+  }
 }
 
 /* ---------- account page ---------- */
@@ -538,7 +571,15 @@ async function initAccountPage() {
     window.location.href = 'index.html';
   });
 
-  const orders = Orders.byUser(user.id);
+  let orders = [];
+  try {
+    const response = await fetch('/api/customer/orders', { credentials: 'same-origin' });
+    const result = await response.json();
+    if (response.ok && result.ok) {
+      orders = result.orders;
+      Orders.replace(orders);
+    }
+  } catch {}
   const ordersEl = document.getElementById('ordersList');
   if (!orders.length) {
     ordersEl.innerHTML = emptyStateHTML('📦', "You haven't placed any orders yet", 'Start exploring our collection.', 'shop.html', 'Start Shopping');
@@ -548,6 +589,7 @@ async function initAccountPage() {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
           <div>
             <strong>${o.orderNumber}</strong>
+            <ul class="order-item-list" style="margin-top:10px;">${o.items.map(item => `<li><span>${item.name}</span><strong>×${item.quantity ?? item.qty ?? 1}</strong></li>`).join('')}</ul>
             <div style="font-size:12.5px;color:var(--gray-600);">${new Date(o.createdAt).toLocaleDateString()} · ${o.items.length} item(s)</div>
           </div>
           <div style="display:flex;align-items:center;gap:14px;">
@@ -628,14 +670,41 @@ function initRegisterPage() {
 }
 
 /* ---------- order success ---------- */
-function initOrderSuccessPage() {
+async function initOrderSuccessPage() {
   const id = getQueryParam('order');
-  const order = Orders.byId(id);
+  const token = getQueryParam('token');
+  const reference = getQueryParam('reference');
   const wrap = document.getElementById('successWrap');
+  let order = Orders.byId(id);
+  if (id && token && reference) {
+    try {
+      const response = await fetch('/api/payments/verify', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: id, accessToken: token, reference })
+      });
+      const result = await response.json();
+      if (response.ok && result.ok) order = result.order;
+    } catch {}
+  }
+  if (id && token) {
+    try {
+      const response = await fetch(`/api/orders/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { credentials: 'same-origin' });
+      const result = await response.json();
+      if (response.ok && result.ok) order = result.order;
+    } catch {}
+  }
   if (!order) { wrap.innerHTML = emptyStateHTML('❌','Order not found','We could not locate that order.', 'shop.html', 'Continue Shopping'); return; }
   document.getElementById('successOrderNum').textContent = order.orderNumber;
   document.getElementById('successTotal').textContent = formatPrice(order.total);
   document.getElementById('successEmail').textContent = order.customer.email;
+  Orders.replace([order, ...Orders.all().filter(existing => existing.id !== order.id)]);
+  if (order.paymentStatus !== 'Paid') {
+    const message = wrap.querySelector('.container > p');
+    if (message) message.textContent = 'Your order has been saved. Payment is still pending; we will update its status once confirmed.';
+    const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
+    if (totalLabel) totalLabel.textContent = 'Order Total';
+  }
 }
 
 /* ---------- contact page ---------- */

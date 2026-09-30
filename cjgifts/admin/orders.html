@@ -15,11 +15,12 @@
     <div class="admin-topbar"><h1>Orders</h1></div>
 
     <div class="admin-panel">
+      <p id="adminOrderRefreshMessage" role="status" style="color:#9b2c2c;margin:0 0 14px;" hidden></p>
       <div class="toolbar" style="margin-bottom:20px;">
         <input type="search" id="adminOrderSearch" placeholder="Search by order # or customer..." style="padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;min-width:260px;">
         <select id="adminOrderStatusFilter">
           <option value="">All Statuses</option>
-          <option>Pending</option><option>Paid</option><option>Processing</option>
+          <option>Pending</option><option>Processing</option><option>Preparing</option>
           <option>Shipped</option><option>Delivered</option><option>Cancelled</option>
         </select>
       </div>

@@ -272,6 +272,7 @@ const Auth = {
 /* ---------------- orders ---------------- */
 const Orders = {
   all() { return dbGet(DB_KEYS.ORDERS, []); },
+  replace(orders) { dbSet(DB_KEYS.ORDERS, orders); },
   byUser(userId) { return this.all().filter(o => o.userId === userId).sort((a,b)=>b.createdAt-a.createdAt); },
   byId(id) { return this.all().find(o => o.id === id); },
   create(order) {

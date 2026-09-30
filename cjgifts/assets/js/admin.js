@@ -68,11 +68,65 @@ async function refreshAdminProducts() {
   Products.replace(result.products);
 }
 
+async function refreshAdminOrders() {
+  const response = await fetch('/api/admin/orders', { credentials: 'same-origin' });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to load orders.');
+  Orders.replace(result.orders);
+}
+
+function setAdminOrderRefreshMessage(message = '') {
+  const notice = document.getElementById('adminOrderRefreshMessage');
+  if (notice) {
+    notice.textContent = message;
+    notice.hidden = !message;
+  }
+}
+
+function watchAdminOrders(onRefresh) {
+  let refreshing = false;
+  const refresh = async () => {
+    if (refreshing || document.visibilityState === 'hidden') return;
+    refreshing = true;
+    try {
+      await refreshAdminOrders();
+      setAdminOrderRefreshMessage('');
+      onRefresh();
+    } catch (error) {
+      setAdminOrderRefreshMessage(`Orders could not be refreshed: ${error.message || 'Please try again.'}`);
+    } finally {
+      refreshing = false;
+    }
+  };
+  window.setInterval(refresh, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refresh();
+  });
+}
+
 /* ---------- dashboard overview ---------- */
 async function initAdminDashboard() {
   if (!await requireAdmin()) return;
-  await refreshAdminProducts();
+  let initialOrderError = '';
+  const orderRefresh = refreshAdminOrders().catch(error => { initialOrderError = error.message || 'Please try again.'; });
+  await Promise.all([refreshAdminProducts(), orderRefresh]);
   renderAdminShell('dashboard');
+  setAdminOrderRefreshMessage(initialOrderError ? `Orders could not be refreshed: ${initialOrderError}` : '');
+  renderAdminDashboardOrders();
+  watchAdminOrders(renderAdminDashboardOrders);
+  const recentProducts = [...Products.all()].sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
+  document.getElementById('recentProductsBody').innerHTML = recentProducts.length ? recentProducts.map(p => `
+    <tr>
+      <td><img src="${p.images[0]}" alt=""></td>
+      <td><strong>${p.name}</strong><br><span style="font-size:12px;color:var(--gray-600);">${p.sku}</span></td>
+      <td>${CATEGORIES.find(c=>c.id===p.category)?.name}</td>
+      <td>${formatPrice(p.salePrice ?? p.price)}</td>
+      <td>${p.stock}</td>
+      <td><span class="badge ${p.published?'published':'draft'}">${p.published?'Published':'Draft'}</span></td>
+    </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:30px;">No products yet</td></tr>`;
+}
+
+function renderAdminDashboardOrders() {
   const products = Products.all();
   const orders = Orders.all();
   const customers = Auth.users();
@@ -96,16 +150,6 @@ async function initAdminDashboard() {
       <td><span class="badge ${o.status.toLowerCase()}">${o.status}</span></td>
     </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:30px;">No orders yet</td></tr>`;
 
-  const recentProducts = [...products].sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
-  document.getElementById('recentProductsBody').innerHTML = recentProducts.length ? recentProducts.map(p => `
-    <tr>
-      <td><img src="${p.images[0]}" alt=""></td>
-      <td><strong>${p.name}</strong><br><span style="font-size:12px;color:var(--gray-600);">${p.sku}</span></td>
-      <td>${CATEGORIES.find(c=>c.id===p.category)?.name}</td>
-      <td>${formatPrice(p.salePrice ?? p.price)}</td>
-      <td>${p.stock}</td>
-      <td><span class="badge ${p.published?'published':'draft'}">${p.published?'Published':'Draft'}</span></td>
-    </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:30px;">No products yet</td></tr>`;
 }
 
 /* ---------- products list ---------- */
@@ -295,8 +339,13 @@ async function saveProductForm(id, existing) {
 /* ---------- admin orders ---------- */
 async function initAdminOrdersPage() {
   if (!await requireAdmin()) return;
+  let initialOrderError = '';
+  try { await refreshAdminOrders(); }
+  catch (error) { initialOrderError = error.message || 'Please try again.'; }
   renderAdminShell('orders');
+  setAdminOrderRefreshMessage(initialOrderError ? `Orders could not be refreshed: ${initialOrderError}` : '');
   renderAdminOrdersTable();
+  watchAdminOrders(renderAdminOrdersTable);
   document.getElementById('adminOrderSearch').addEventListener('input', renderAdminOrdersTable);
   document.getElementById('adminOrderStatusFilter').addEventListener('change', renderAdminOrdersTable);
 }
@@ -307,7 +356,7 @@ function renderAdminOrdersTable() {
   if (q) list = list.filter(o => o.orderNumber.toLowerCase().includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.email.toLowerCase().includes(q));
   if (status) list = list.filter(o => o.status === status);
 
-  const statuses = ['Pending','Paid','Processing','Shipped','Delivered','Cancelled'];
+  const statuses = ['Pending','Processing','Preparing','Shipped','Delivered','Cancelled'];
   const body = document.getElementById('adminOrdersBody');
   body.innerHTML = list.length ? list.map(o => `
     <tr>
@@ -324,10 +373,22 @@ function renderAdminOrdersTable() {
       <td>${new Date(o.createdAt).toLocaleDateString()}</td>
     </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No orders found</td></tr>`;
 }
-function updateOrderStatus(id, status) {
-  Orders.updateStatus(id, status);
-  showToast('Order status updated');
-  renderAdminOrdersTable();
+async function updateOrderStatus(id, status) {
+  try {
+    const response = await fetch(`/api/admin/orders/${encodeURIComponent(id)}/status`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to update order status.');
+    await refreshAdminOrders();
+    showToast('Order status updated');
+    renderAdminOrdersTable();
+  } catch (error) {
+    showToast(error.message || 'Unable to update order status.');
+  }
 }
 
 /* ---------- admin customers ---------- */

@@ -1,13 +1,11 @@
 import 'dotenv/config';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-
-import { readStore, writeStore, buildOrderNumber, orderAccessToken } from './src/lib/store.js';
+import { readStore, writeStore, buildOrderNumber } from './src/lib/store.js';
 import { prisma } from './src/lib/prisma.js';
 import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference, canTransitionStatus, PAYMENT_STATUSES } from './src/lib/validation.js';
 
@@ -21,7 +19,7 @@ const ADMIN_SESSION_COOKIE = 'cjgifts_admin_session';
 const CUSTOMER_SESSION_COOKIE = 'cjgifts_customer_session';
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
@@ -90,6 +88,57 @@ function setAdminCookie(req, res, token, maxAgeSeconds) {
 function clearAdminCookie(req, res) {
   const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function serializeOrder(order) {
+  const delivery = {
+    country: order.deliveryCountry,
+    city: order.deliveryCity,
+    region: order.deliveryRegion || '',
+    street: order.deliveryStreet,
+    apartment: order.deliveryApartment || '',
+    postalCode: order.deliveryPostalCode || '',
+    instructions: order.notes || ''
+  };
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    accessToken: order.accessToken,
+    customer: { name: order.customer.name, email: order.customer.email, phone: order.customer.phone || '' },
+    recipient: { name: order.customer.name, phone: order.customer.phone || '' },
+    delivery,
+    shippingAddress: { address: delivery.street, city: delivery.city, state: delivery.region, country: delivery.country, postal: delivery.postalCode },
+    items: (order.items || []).map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      sku: item.sku,
+      quantity: item.quantity,
+      qty: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      price: Number(item.unitPrice)
+    })),
+    subtotal: Number(order.subtotal),
+    discount: 0,
+    shipping: Number(order.shippingFee),
+    shippingFee: Number(order.shippingFee),
+    tax: Number(order.tax),
+    total: Number(order.total),
+    currency: order.currency,
+    paymentStatus: order.paymentStatus,
+    fulfillmentStatus: order.fulfillmentStatus,
+    status: order.fulfillmentStatus,
+    statusHistory: order.statusHistory || [],
+    createdAt: order.createdAt.getTime(),
+    updatedAt: order.updatedAt.getTime()
+  };
+}
+
+class OrderRequestError extends Error {
+  constructor(status, message, details) {
+    super(message);
+    this.status = status;
+    this.details = details;
+  }
 }
 
 function readCustomerCookie(req) {
@@ -206,9 +255,9 @@ app.use('/api', (req, res, next) => {
 app.use(express.static(path.join(ROOT_DIR, 'cjgifts')));
 
 app.get('/api/health', async (req, res) => {
-  const store = await readStore();
   await prisma.$queryRaw`SELECT 1`;
-  res.json({ ok: true, status: 'ok', database: 'connected', products: store.products.length, orders: store.orders.length, timestamp: Date.now() });
+  const [products, orders] = await Promise.all([prisma.product.count(), prisma.order.count()]);
+  res.json({ ok: true, status: 'ok', database: 'connected', products, orders, timestamp: Date.now() });
 });
 
 app.get('/api/products', async (req, res) => {
@@ -372,252 +421,279 @@ app.delete('/api/admin/products/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
-app.get('/api/admin/orders', requireAdmin, async (req, res) => {
-  const store = await readStore();
-  res.json({ ok: true, orders: store.orders || [] });
+app.get('/api/admin/orders', requireAdmin, async (req, res, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      include: { customer: true, items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json({ ok: true, orders: orders.map(serializeOrder) });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-app.post('/api/orders', async (req, res) => {
-  const parsed = orderSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    return errorResponse(res, 400, 'Order validation failed.', parsed.error.flatten());
+app.put('/api/admin/orders/:id/status', requireAdmin, async (req, res, next) => {
+  try {
+    const status = String(req.body?.status || '');
+    const allowed = ['Pending', 'Processing', 'Preparing', 'Shipped', 'Delivered', 'Cancelled'];
+    if (!allowed.includes(status)) return errorResponse(res, 400, 'Order status is invalid.');
+    const current = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!current) return errorResponse(res, 404, 'Order not found.');
+    const statusHistory = Array.isArray(current.statusHistory) ? current.statusHistory : [];
+    const order = await prisma.order.update({
+      where: { id: current.id },
+      data: {
+        fulfillmentStatus: status,
+        statusHistory: [...statusHistory, { status, timestamp: new Date().toISOString(), message: 'Order status updated by admin.' }]
+      },
+      include: { customer: true, items: true }
+    });
+    return res.json({ ok: true, order: serializeOrder(order) });
+  } catch (error) {
+    return next(error);
   }
+});
+
+app.post('/api/orders', async (req, res, next) => {
+  const parsed = orderSchema.safeParse(req.body);
+  if (!parsed.success) return errorResponse(res, 400, 'Order validation failed.', parsed.error.flatten());
 
   const payload = parsed.data;
-  const store = await readStore();
-  const catalog = store.products || [];
-  const validation = validateCart(payload.items.map((item) => ({ productId: item.productId, quantity: item.quantity })), catalog);
+  try {
+    const order = await prisma.$transaction(async (tx) => {
+      const products = await tx.product.findMany({
+        where: { id: { in: payload.items.map((item) => item.productId) }, published: true }
+      });
+      const catalog = products.map((product) => ({
+        ...product,
+        price: Number(product.price),
+        salePrice: product.salePrice === null ? null : Number(product.salePrice)
+      }));
+      const validation = validateCart(payload.items.map((item) => ({ productId: item.productId, quantity: item.quantity })), catalog);
+      if (!validation.ok) throw new OrderRequestError(400, 'Cart validation failed.', validation.errors);
 
-  if (!validation.ok) {
-    return errorResponse(res, 400, 'Cart validation failed.', validation.errors);
-  }
+      const shipping = getShippingFee(payload.delivery.country, validation.subtotal);
+      if (!shipping.eligible) throw new OrderRequestError(400, shipping.message, { country: payload.delivery.country });
+      const totals = calculateOrderTotal(validation.items, shipping.shippingFee, 0);
+      const email = payload.customer.email.trim().toLowerCase();
+      const customer = await tx.customer.upsert({
+        where: { email },
+        create: {
+          name: payload.customer.name,
+          email,
+          phone: payload.customer.phone,
+          address: {
+            line1: payload.delivery.street,
+            city: payload.delivery.city,
+            state: payload.delivery.region || '',
+            country: payload.delivery.country,
+            postal: payload.delivery.postalCode || ''
+          }
+        },
+        update: { name: payload.customer.name, phone: payload.customer.phone }
+      });
 
-  const shipping = getShippingFee(payload.delivery.country, validation.subtotal);
-  if (!shipping.eligible) {
-    return errorResponse(res, 400, shipping.message, { country: payload.delivery.country });
-  }
-
-  const orderTotal = calculateOrderTotal(validation.items, shipping.shippingFee, 0);
-  const orderId = uuidv4();
-  const orderNumber = buildOrderNumber();
-  const accessToken = orderAccessToken();
-  const paymentReference = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-  const order = {
-    id: orderId,
-    orderNumber,
-    accessToken,
-    paymentReference,
-    customer: payload.customer,
-    recipient: payload.recipient,
-    delivery: payload.delivery,
-    items: validation.items,
-    shippingMethod: payload.shippingMethod || 'Standard',
-    currency: payload.currency,
-    subtotal: orderTotal.subtotal,
-    shippingFee: orderTotal.shippingFee,
-    tax: orderTotal.tax,
-    total: orderTotal.total,
-    paymentStatus: 'Pending',
-    fulfillmentStatus: 'Processing',
-    statusHistory: [
-      {
-        status: 'Processing',
-        timestamp: new Date().toISOString(),
-        message: 'Order created and awaiting payment confirmation.'
+      for (const item of validation.items) {
+        const updated = await tx.product.updateMany({
+          where: { id: item.productId, published: true, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } }
+        });
+        if (updated.count !== 1) throw new OrderRequestError(409, `${item.name} no longer has enough stock.`);
       }
-    ],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    isArchived: false
-  };
 
-  store.orders = [order, ...(store.orders || [])];
-
-  for (const item of validation.items) {
-    const product = catalog.find((entry) => entry.id === item.productId);
-    if (product) {
-      product.stock = Math.max(0, Number(product.stock || 0) - Number(item.quantity || 0));
-    }
-  }
-
-  await writeStore(store);
-
-  res.status(201).json({ ok: true, order, payment: { publicKey: PAYSTACK_PUBLIC_KEY } });
-});
-
-app.post('/api/payments/initiate', async (req, res) => {
-  const { orderId, email, amount, currency, callbackUrl } = req.body || {};
-
-  if (!orderId || !email || !amount || !currency) {
-    return errorResponse(res, 400, 'Missing required payment fields.');
-  }
-
-  if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.includes('your_paystack')) {
-    return res.json({
-      ok: true,
-      mock: true,
-      message: 'Paystack credentials are not configured. Using safe local test mode.',
-      reference: `paystack_test_${Date.now()}`,
-      authorizationUrl: callbackUrl || 'http://localhost:3001/order-success.html',
-      amount,
-      currency
+      const productsById = new Map(products.map((product) => [product.id, product]));
+      return tx.order.create({
+        data: {
+          orderNumber: buildOrderNumber(),
+          accessToken: randomBytes(32).toString('base64url'),
+          customerId: customer.id,
+          subtotal: totals.subtotal,
+          shippingFee: totals.shippingFee,
+          tax: totals.tax,
+          total: totals.total,
+          currency: payload.currency,
+          paymentStatus: 'Pending',
+          fulfillmentStatus: 'Processing',
+          deliveryCountry: payload.delivery.country,
+          deliveryCity: payload.delivery.city,
+          deliveryStreet: payload.delivery.street,
+          deliveryRegion: payload.delivery.region || null,
+          notes: [payload.delivery.apartment, payload.delivery.instructions].filter(Boolean).join(' — ') || null,
+          statusHistory: [{ status: 'Processing', timestamp: new Date().toISOString(), message: 'Order created and awaiting payment confirmation.' }],
+          items: {
+            create: validation.items.map((item) => ({
+              productId: item.productId,
+              name: item.name,
+              sku: productsById.get(item.productId).sku,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice
+            }))
+          }
+        },
+        include: { customer: true, items: true }
+      });
     });
+    return res.status(201).json({ ok: true, order: serializeOrder(order) });
+  } catch (error) {
+    if (error instanceof OrderRequestError) return errorResponse(res, error.status, error.message, error.details);
+    return next(error);
   }
-
-  const order = (await readStore()).orders.find((entry) => entry.id === orderId) || null;
-  const reference = order?.paymentReference || `pay_${Date.now()}`;
-
-  const response = await fetch('https://api.paystack.co/transaction/initialize', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      email,
-      amount: Number(amount) * 100,
-      currency,
-      reference,
-      callback_url: callbackUrl
-    })
-  });
-
-  const data = await response.json();
-  if (!response.ok || !data.status) {
-    return errorResponse(res, 400, 'Unable to initialize Paystack payment.', data);
-  }
-
-  res.json({ ok: true, authorizationUrl: data.data.authorization_url, reference: data.data.reference });
 });
 
-app.post('/api/payments/verify', async (req, res) => {
-  const { reference, orderId, expectedAmount, expectedCurrency } = req.body || {};
+app.post('/api/payments/initiate', async (req, res, next) => {
+  try {
+    const { orderId, accessToken, callbackUrl } = req.body || {};
+    if (!orderId) return errorResponse(res, 400, 'An order is required to start payment.');
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
+    if (!order) return errorResponse(res, 404, 'Order not found.');
+    if (!accessToken || order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized order payment.');
+    if (order.paymentStatus === 'Paid') return res.json({ ok: true, alreadyPaid: true });
 
-  if (!reference) {
-    return errorResponse(res, 400, 'A payment reference is required.');
-  }
+    const reference = `cjgifts_${order.id}_${Date.now()}`;
+    const payment = await prisma.payment.create({ data: {
+      orderId: order.id,
+      reference,
+      amount: order.total,
+      currency: order.currency,
+      status: 'Pending'
+    } });
 
-  const store = await readStore();
-  const order = (store.orders || []).find((entry) => entry.id === orderId);
-
-  if (!order) {
-    return errorResponse(res, 404, 'Order not found.');
-  }
-
-  if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.includes('your_paystack')) {
-    const success = reference.startsWith('paystack_test_') || reference.startsWith('pay_');
-    if (!success) {
-      return errorResponse(res, 400, 'Verification failed: invalid local test reference.');
+    if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.includes('your_paystack')) {
+      return res.json({ ok: true, mock: true, reference: payment.reference, authorizationUrl: callbackUrl || '/order-success.html' });
     }
 
-    order.paymentStatus = 'Paid';
-    order.fulfillmentStatus = 'Processing';
-    order.statusHistory = [
-      ...order.statusHistory,
-      { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified in local test mode.' }
-    ];
-    order.updatedAt = Date.now();
-    await writeStore(store);
-
-    return res.json({ ok: true, verified: true, order });
+    const response = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: order.customer.email,
+        amount: Number(order.total) * 100,
+        currency: order.currency,
+        reference: payment.reference,
+        callback_url: callbackUrl
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.status) {
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: 'Failed', payload: data } });
+      return errorResponse(res, 400, 'Unable to initialize Paystack payment.', data);
+    }
+    return res.json({ ok: true, authorizationUrl: data.data.authorization_url, reference: data.data.reference });
+  } catch (error) {
+    return next(error);
   }
+});
 
-  const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` }
-  });
+app.post('/api/payments/verify', async (req, res, next) => {
+  try {
+    const { reference, orderId, accessToken } = req.body || {};
+    if (!reference || !orderId) return errorResponse(res, 400, 'A payment reference and order are required.');
+    const payment = await prisma.payment.findFirst({
+      where: { reference, orderId },
+      include: { order: { include: { customer: true, items: true } } }
+    });
+    if (!payment) return errorResponse(res, 404, 'Payment or order not found.');
+    if (!accessToken || payment.order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized payment verification.');
+    if (payment.status === 'Paid') return res.json({ ok: true, verified: true, order: serializeOrder(payment.order) });
 
-  const data = await response.json();
-  if (!response.ok || !data.status) {
-    return errorResponse(res, 400, 'Payment verification failed.', data);
+    if (PAYSTACK_SECRET_KEY && !PAYSTACK_SECRET_KEY.includes('your_paystack')) {
+      const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        method: 'GET', headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.status) return errorResponse(res, 400, 'Payment verification failed.', data);
+      const verification = verifyPaystackReference({
+        expectedReference: payment.reference,
+        receivedReference: data.data.reference,
+        expectedAmount: Number(payment.amount),
+        receivedAmount: Number(data.data.amount) / 100,
+        expectedCurrency: payment.currency,
+        receivedCurrency: data.data.currency || payment.currency
+      });
+      if (!verification.ok || data.data.status !== 'success') return errorResponse(res, 400, verification.reason || 'Payment is not successful.');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const history = Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : [];
+      await tx.payment.update({ where: { id: payment.id }, data: { status: 'Paid' } });
+      return tx.order.update({
+        where: { id: orderId },
+        data: {
+          paymentStatus: 'Paid',
+          statusHistory: [...history, { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified successfully.' }]
+        },
+        include: { customer: true, items: true }
+      });
+    });
+    return res.json({ ok: true, verified: true, order: serializeOrder(updated) });
+  } catch (error) {
+    return next(error);
   }
-
-  const verification = verifyPaystackReference({
-    expectedReference: order.paymentReference,
-    receivedReference: data.data.reference,
-    expectedAmount: Number(expectedAmount),
-    receivedAmount: Number(data.data.amount) / 100,
-    expectedCurrency: expectedCurrency || order.currency,
-    receivedCurrency: data.data.currency || order.currency
-  });
-
-  if (!verification.ok) {
-    return errorResponse(res, 400, verification.reason);
-  }
-
-  order.paymentStatus = 'Paid';
-  order.fulfillmentStatus = 'Processing';
-  order.statusHistory = [
-    ...order.statusHistory,
-    { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified successfully.' }
-  ];
-  order.updatedAt = Date.now();
-
-  await writeStore(store);
-
-  res.json({ ok: true, verified: true, order });
 });
 
 app.post('/api/payments/webhook', async (req, res) => {
   const signature = req.headers['x-paystack-signature'];
   const body = req.body || {};
-
-  if (!signature) {
-    return res.status(401).json({ ok: false, message: 'Missing webhook signature.' });
+  if (!signature || !PAYSTACK_SECRET_KEY || !req.rawBody) {
+    return res.status(401).json({ ok: false, message: 'Webhook signature could not be verified.' });
   }
-
-  const store = await readStore();
-  const eventId = body.event || `evt_${Date.now()}`;
-  const exists = (store.paymentEvents || []).some((entry) => entry.eventId === eventId);
-
-  if (exists) {
-    return res.status(200).json({ ok: true, duplicate: true });
+  const expected = createHmac('sha512', PAYSTACK_SECRET_KEY).update(req.rawBody).digest();
+  let received;
+  try { received = Buffer.from(String(signature), 'hex'); } catch { received = Buffer.alloc(0); }
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    return res.status(401).json({ ok: false, message: 'Webhook signature is invalid.' });
   }
-
-  store.paymentEvents = [...(store.paymentEvents || []), { eventId, receivedAt: Date.now(), payload: body }];
-  if (body.event === 'charge.success' && body.data?.reference) {
-    const order = (store.orders || []).find((entry) => entry.id === body.data.metadata?.orderId || entry.orderNumber === body.data.metadata?.orderNumber);
-    if (order) {
-      order.paymentStatus = 'Paid';
-      order.fulfillmentStatus = 'Processing';
-      order.statusHistory = [...order.statusHistory, { status: 'Processing', timestamp: new Date().toISOString(), message: 'Webhook payment confirmed.' }];
-      order.updatedAt = Date.now();
-    }
+  if (!['charge.success', 'charge.failed'].includes(body.event) || !body.data?.reference) {
+    return res.status(200).json({ ok: true, received: true });
   }
-
-  await writeStore(store);
-  res.status(200).json({ ok: true, received: true });
+  const payment = await prisma.payment.findUnique({
+    where: { reference: body.data.reference },
+    include: { order: true }
+  });
+  if (!payment) return res.status(200).json({ ok: true, received: true, matched: false });
+  const paymentStatus = body.event === 'charge.success' ? 'Paid' : 'Failed';
+  if (payment.status === paymentStatus) return res.status(200).json({ ok: true, duplicate: true });
+  const nextOrderStatus = body.event === 'charge.success' ? 'Paid' : 'Failed';
+  const history = Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : [];
+  await prisma.$transaction([
+    prisma.payment.update({ where: { id: payment.id }, data: { status: paymentStatus, payload: body } }),
+    prisma.order.update({
+      where: { id: payment.orderId },
+      data: {
+        paymentStatus,
+        statusHistory: [...history, { status: nextOrderStatus, timestamp: new Date().toISOString(), message: `Payment ${paymentStatus.toLowerCase()} confirmed by Paystack webhook.` }]
+      }
+    })
+  ]);
+  return res.status(200).json({ ok: true, received: true });
 });
 
-app.get('/api/orders/:id', async (req, res) => {
-  const { id } = req.params;
-  const { token } = req.query;
-  const store = await readStore();
-  const order = (store.orders || []).find((entry) => entry.id === id || entry.orderNumber === id);
-
-  if (!order) {
-    return errorResponse(res, 404, 'Order not found.');
+app.get('/api/orders/:id', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findFirst({
+      where: { OR: [{ id: req.params.id }, { orderNumber: req.params.id }] },
+      include: { customer: true, items: true }
+    });
+    if (!order) return errorResponse(res, 404, 'Order not found.');
+    if (!req.query.token || order.accessToken !== req.query.token) return errorResponse(res, 403, 'Unauthorized order lookup.');
+    return res.json({ ok: true, order: serializeOrder(order) });
+  } catch (error) {
+    return next(error);
   }
-
-  const canView = token && order.accessToken === token;
-  if (!canView) {
-    return errorResponse(res, 403, 'Unauthorized order lookup.');
-  }
-
-  res.json({ ok: true, order });
 });
 
-app.get('/api/customer/orders', async (req, res) => {
-  const { email } = req.query;
-  if (!email) {
-    return errorResponse(res, 400, 'An email is required to lookup orders.');
+app.get('/api/customer/orders', requireCustomer, async (req, res, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { customerId: req.customer.id },
+      include: { customer: true, items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json({ ok: true, orders: orders.map(serializeOrder) });
+  } catch (error) {
+    return next(error);
   }
-
-  const store = await readStore();
-  const orders = (store.orders || []).filter((order) => order.customer.email.toLowerCase() === String(email).toLowerCase());
-  res.json({ ok: true, orders });
 });
 
 app.get('*', (req, res) => {
