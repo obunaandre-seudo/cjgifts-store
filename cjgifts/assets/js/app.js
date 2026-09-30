@@ -465,9 +465,19 @@ function submitOrder(items, subtotal, discount, shipping) {
 }
 
 /* ---------- account page ---------- */
-function initAccountPage() {
-  const user = Auth.currentUser();
-  if (!user) { window.location.href = 'login.html?redirect=account.html'; return; }
+async function initAccountPage() {
+  let user;
+  try {
+    const response = await fetch('/api/customer/session', { credentials: 'same-origin' });
+    if (!response.ok) throw new Error('Sign in required.');
+    const result = await response.json();
+    user = result.customer;
+    Auth.persistSession(user);
+  } catch {
+    Auth.logout();
+    window.location.href = 'login.html?redirect=account.html';
+    return;
+  }
   document.getElementById('accName').textContent = user.name;
   document.getElementById('accEmail').textContent = user.email;
   document.getElementById('profileName').value = user.name || '';
@@ -479,9 +489,9 @@ function initAccountPage() {
     document.getElementById('profileCountry').value = user.address.country || '';
   }
 
-  document.getElementById('profileForm').addEventListener('submit', (e) => {
+  document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    Auth.updateUser(user.id, {
+    const profile = {
       name: document.getElementById('profileName').value,
       phone: document.getElementById('profilePhone').value,
       address: {
@@ -489,12 +499,22 @@ function initAccountPage() {
         city: document.getElementById('profileCity').value,
         country: document.getElementById('profileCountry').value
       }
-    });
-    showToast('Profile updated successfully');
-    document.getElementById('accName').textContent = document.getElementById('profileName').value;
+    };
+    try {
+      const response = await fetch('/api/customer/profile', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to update profile.');
+      user = result.customer;
+      Auth.persistSession(user);
+      showToast('Profile updated successfully');
+      document.getElementById('accName').textContent = user.name;
+    } catch (error) {
+      showToast(error.message || 'Unable to update profile');
+    }
   });
 
-  document.getElementById('logoutBtn').addEventListener('click', () => {
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/customer/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     Auth.logout();
     window.location.href = 'index.html';
   });
@@ -545,8 +565,19 @@ function initLoginPage() {
       // Customer sign-in remains available if the admin endpoint is unreachable.
     }
 
-    const res = Auth.login(email, password);
-    if (!res.ok) { err.textContent = res.error; err.style.display = 'block'; return; }
+    try {
+      const response = await fetch('/api/customer/login', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Invalid email or password.');
+      Auth.persistSession(result.customer);
+    } catch (error) {
+      err.textContent = error.message || 'Unable to reach the sign-in service.';
+      err.style.display = 'block';
+      return;
+    }
     const redirect = getQueryParam('redirect') || 'account.html';
     window.location.href = redirect;
   });
@@ -554,16 +585,26 @@ function initLoginPage() {
 function initRegisterPage() {
   const form = document.getElementById('registerForm');
   if (!form) return;
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = document.getElementById('regName').value;
     const email = document.getElementById('regEmail').value;
     const password = document.getElementById('regPassword').value;
     const err = document.getElementById('registerError');
     if (password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display='block'; return; }
-    const res = Auth.register(name, email, password);
-    if (!res.ok) { err.textContent = res.error; err.style.display = 'block'; return; }
-    window.location.href = 'account.html';
+    try {
+      const response = await fetch('/api/customer/register', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to create account.');
+      Auth.persistSession(result.customer);
+      window.location.href = 'account.html';
+    } catch (error) {
+      err.textContent = error.message || 'Unable to reach the sign-up service.';
+      err.style.display = 'block';
+    }
   });
 }
 

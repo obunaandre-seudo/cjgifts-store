@@ -1,7 +1,7 @@
 /* ============================================================
    CJ GIFTS — DATA LAYER
-  Uses browser localStorage for storefront data and cart state.
-  Admin authentication is handled by the server.
+   Uses browser storage for storefront data and the signed-in profile cache.
+  Customer and admin authentication are handled by the server.
    ============================================================ */
 
 const DB_KEYS = {
@@ -246,23 +246,11 @@ const Cart = {
 /* ---------------- users / auth ---------------- */
 const Auth = {
   users() { return dbGet(DB_KEYS.USERS, []); },
-  register(name, email, password) {
-    const users = this.users();
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-      return { ok: false, error: 'An account with this email already exists.' };
-    }
-    const user = { id: 'u' + Date.now(), name, email, password: btoa(password), createdAt: Date.now(),
-      address: {}, phone: '' };
+  persistSession(user) {
+    const users = this.users().filter((entry) => entry.id !== user.id);
     users.push(user);
     dbSet(DB_KEYS.USERS, users);
     dbSet(DB_KEYS.CURRENT_USER, user.id);
-    return { ok: true, user };
-  },
-  login(email, password) {
-    const user = this.users().find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === btoa(password));
-    if (!user) return { ok: false, error: 'Invalid email or password.' };
-    dbSet(DB_KEYS.CURRENT_USER, user.id);
-    return { ok: true, user };
   },
   logout() { localStorage.removeItem(DB_KEYS.CURRENT_USER); },
   currentUser() {

@@ -12,9 +12,21 @@ model Customer {
   name      String
   email     String   @unique
   phone     String?
+  passwordHash String?
+  address   Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   orders    Order[]
+  sessions  CustomerSession[]
+}
+
+model CustomerSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  customerId String
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model AdminUser {

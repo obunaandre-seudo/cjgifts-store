@@ -18,6 +18,7 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_placeholder';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
 const ADMIN_SESSION_COOKIE = 'cjgifts_admin_session';
+const CUSTOMER_SESSION_COOKIE = 'cjgifts_customer_session';
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
@@ -88,6 +89,48 @@ function setAdminCookie(req, res, token, maxAgeSeconds) {
 function clearAdminCookie(req, res) {
   const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function readCustomerCookie(req) {
+  const prefix = `${CUSTOMER_SESSION_COOKIE}=`;
+  const entry = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  return entry ? entry.slice(prefix.length) : null;
+}
+
+function setCustomerCookie(req, res, token, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', `${CUSTOMER_SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${secure ? '; Secure' : ''}`);
+}
+
+function clearCustomerCookie(req, res) {
+  const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', `${CUSTOMER_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function publicCustomer(customer) {
+  return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone || '', address: customer.address || {} };
+}
+
+async function getCustomerSession(req) {
+  const token = readCustomerCookie(req);
+  if (!token) return null;
+  const session = await prisma.customerSession.findUnique({ where: { tokenHash: hashSessionToken(token) }, include: { customer: true } });
+  if (!session || session.expiresAt <= new Date()) {
+    if (session) await prisma.customerSession.delete({ where: { id: session.id } });
+    return null;
+  }
+  return session;
+}
+
+async function requireCustomer(req, res, next) {
+  try {
+    const session = await getCustomerSession(req);
+    if (!session) return errorResponse(res, 401, 'Customer sign-in required.');
+    req.customer = session.customer;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
 
 function hashSessionToken(token) {
@@ -203,6 +246,67 @@ app.post('/api/admin/login', async (req, res, next) => {
 
     setAdminCookie(req, res, token, Math.floor(SESSION_TTL_MS / 1000));
     return res.json({ ok: true, admin: { email: admin.email } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/customer/register', async (req, res, next) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 6) {
+      return errorResponse(res, 400, 'Enter a name, valid email, and password with at least 6 characters.');
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    const customer = await prisma.customer.create({ data: { name, email, passwordHash } });
+    const token = randomBytes(32).toString('base64url');
+    await prisma.customerSession.create({ data: { tokenHash: hashSessionToken(token), customerId: customer.id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) } });
+    setCustomerCookie(req, res, token, Math.floor(SESSION_TTL_MS / 1000));
+    return res.status(201).json({ ok: true, customer: publicCustomer(customer) });
+  } catch (error) {
+    if (error.code === 'P2002') return errorResponse(res, 409, 'An account with this email already exists.');
+    return next(error);
+  }
+});
+
+app.post('/api/customer/login', async (req, res, next) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const customer = await prisma.customer.findUnique({ where: { email } });
+    if (!customer?.passwordHash || !await bcrypt.compare(password, customer.passwordHash)) return errorResponse(res, 401, 'Invalid email or password.');
+    const token = randomBytes(32).toString('base64url');
+    await prisma.customerSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+    await prisma.customerSession.create({ data: { tokenHash: hashSessionToken(token), customerId: customer.id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) } });
+    setCustomerCookie(req, res, token, Math.floor(SESSION_TTL_MS / 1000));
+    return res.json({ ok: true, customer: publicCustomer(customer) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/customer/session', requireCustomer, (req, res) => res.json({ ok: true, customer: publicCustomer(req.customer) }));
+
+app.put('/api/customer/profile', requireCustomer, async (req, res, next) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    if (name.length < 2) return errorResponse(res, 400, 'Name must be at least 2 characters.');
+    const address = req.body?.address && typeof req.body.address === 'object' ? req.body.address : {};
+    const customer = await prisma.customer.update({ where: { id: req.customer.id }, data: { name, phone: String(req.body?.phone || '').trim() || null, address } });
+    return res.json({ ok: true, customer: publicCustomer(customer) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/customer/logout', async (req, res, next) => {
+  try {
+    const token = readCustomerCookie(req);
+    if (token) await prisma.customerSession.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+    clearCustomerCookie(req, res);
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }

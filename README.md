@@ -1,6 +1,6 @@
 # CJ Gifts Store Backend
 
-This project adds a real backend layer for the CJ Gifts storefront. The frontend remains largely in the original static HTML/CSS/JS structure, while the backend provides persistent product, order, checkout, Paystack, and admin APIs.
+This project adds a backend layer for the CJ Gifts storefront. Customer account credentials, sessions, and profile details are stored in PostgreSQL through Prisma; the storefront keeps a small public profile cache in browser storage. Other storefront features still use a mix of server APIs and browser storage.
 
 ## Stack
 
@@ -26,6 +26,11 @@ This project adds a real backend layer for the CJ Gifts storefront. The frontend
 - `GET /api/products` — list catalog
 - `GET /api/products/:id` — product by id
 - `POST /api/orders` — create a validated order
+- `POST /api/customer/register` — create a database-backed customer account
+- `POST /api/customer/login` — customer login
+- `GET /api/customer/session` — current customer session
+- `PUT /api/customer/profile` — update database-backed customer profile
+- `POST /api/customer/logout` — end customer session
 - `GET /api/orders/:id?token=...` — secure customer order lookup
 - `POST /api/admin/login` — admin login
 - `GET /api/admin/orders` — admin order list (requires admin bearer token)
