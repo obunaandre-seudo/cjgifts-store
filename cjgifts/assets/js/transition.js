@@ -9,7 +9,7 @@
       overlay.className = 'cj-loader';
       overlay.setAttribute('role', 'status');
       overlay.setAttribute('aria-label', 'Loading CJ Gifts');
-      overlay.innerHTML = `<div class="loader-orbit orbit-one"></div><div class="loader-orbit orbit-two"></div><div class="loader-box"><span class="loader-ribbon"></span><span class="loader-bow">\u2726</span></div><div class="loader-brand"><span>CJ</span> GIFTS</div><div class="loader-caption">A little joy is on its way</div><div class="loader-progress"><i></i></div>`;
+      overlay.innerHTML = `<div class="loader-gift-scene" aria-hidden="true"><div class="loader-gift"><i class="gift-face gift-face-front"></i><i class="gift-face gift-face-back"></i><i class="gift-face gift-face-right"></i><i class="gift-face gift-face-left"></i><i class="gift-face gift-face-top"></i><i class="gift-face gift-face-bottom"></i><span class="gift-bow"></span></div><div class="gift-shadow"></div></div><div class="loader-brand"><span>CJ</span> GIFTS</div><div class="loader-caption">A little joy is on its way</div>`;
       document.body.appendChild(overlay);
     }
     requestAnimationFrame(() => overlay.classList.add('visible'));
