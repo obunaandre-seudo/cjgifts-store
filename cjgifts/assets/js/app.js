@@ -538,7 +538,9 @@ async function initAccountPage() {
   if (user.address) {
     document.getElementById('profileAddress').value = user.address.line1 || '';
     document.getElementById('profileCity').value = user.address.city || '';
+    document.getElementById('profileState').value = user.address.state || '';
     document.getElementById('profileCountry').value = user.address.country || '';
+    document.getElementById('profilePostal').value = user.address.postal || '';
   }
 
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
@@ -549,7 +551,9 @@ async function initAccountPage() {
       address: {
         line1: document.getElementById('profileAddress').value,
         city: document.getElementById('profileCity').value,
-        country: document.getElementById('profileCountry').value
+        state: document.getElementById('profileState').value,
+        country: document.getElementById('profileCountry').value,
+        postal: document.getElementById('profilePostal').value
       }
     };
     try {
@@ -656,7 +660,18 @@ function initRegisterPage() {
     try {
       const response = await fetch('/api/customer/register', {
         method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name, email, password,
+          phone: document.getElementById('regPhone').value.trim(),
+          address: {
+            line1: document.getElementById('regAddress').value.trim(),
+            city: document.getElementById('regCity').value.trim(),
+            state: document.getElementById('regState').value.trim(),
+            country: document.getElementById('regCountry').value.trim(),
+            postal: document.getElementById('regPostal').value.trim()
+          }
+        })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Unable to create account.');

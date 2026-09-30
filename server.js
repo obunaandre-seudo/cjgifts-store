@@ -161,6 +161,14 @@ function publicCustomer(customer) {
   return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone || '', address: customer.address || {} };
 }
 
+function customerAddressFrom(body = {}) {
+  const raw = body.address && typeof body.address === 'object' ? body.address : body;
+  const fields = ['line1', 'city', 'state', 'country', 'postal'];
+  return Object.fromEntries(fields
+    .map(field => [field, String(raw[field] || '').trim()])
+    .filter(([, value]) => value));
+}
+
 async function getCustomerSession(req) {
   const token = readCustomerCookie(req);
   if (!token) return null;
@@ -310,7 +318,11 @@ app.post('/api/customer/register', async (req, res, next) => {
       return errorResponse(res, 400, 'Enter a name, valid email, and password with at least 6 characters.');
     }
     const passwordHash = await bcrypt.hash(password, 12);
-    const customer = await prisma.customer.create({ data: { name, email, passwordHash } });
+    const phone = String(req.body?.phone || '').trim();
+    const address = customerAddressFrom(req.body);
+    const customer = await prisma.customer.create({
+      data: { name, email, passwordHash, phone: phone || null, address: Object.keys(address).length ? address : undefined }
+    });
     const token = randomBytes(32).toString('base64url');
     await prisma.customerSession.create({ data: { tokenHash: hashSessionToken(token), customerId: customer.id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) } });
     setCustomerCookie(req, res, token, Math.floor(SESSION_TTL_MS / 1000));
@@ -343,8 +355,14 @@ app.put('/api/customer/profile', requireCustomer, async (req, res, next) => {
   try {
     const name = String(req.body?.name || '').trim();
     if (name.length < 2) return errorResponse(res, 400, 'Name must be at least 2 characters.');
-    const address = req.body?.address && typeof req.body.address === 'object' ? req.body.address : {};
-    const customer = await prisma.customer.update({ where: { id: req.customer.id }, data: { name, phone: String(req.body?.phone || '').trim() || null, address } });
+    const existingAddress = req.customer.address && typeof req.customer.address === 'object' && !Array.isArray(req.customer.address)
+      ? req.customer.address : {};
+    const submittedAddress = req.body?.address && typeof req.body.address === 'object' ? req.body.address : {};
+    const address = { ...existingAddress, ...customerAddressFrom({ address: submittedAddress }) };
+    const customer = await prisma.customer.update({
+      where: { id: req.customer.id },
+      data: { name, phone: String(req.body?.phone ?? req.customer.phone ?? '').trim() || null, address }
+    });
     return res.json({ ok: true, customer: publicCustomer(customer) });
   } catch (error) {
     return next(error);
@@ -433,6 +451,23 @@ app.get('/api/admin/orders', requireAdmin, async (req, res, next) => {
   }
 });
 
+app.get('/api/admin/customers', requireAdmin, async (req, res, next) => {
+  try {
+    const customers = await prisma.customer.findMany({
+      include: { orders: { select: { total: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json({ ok: true, customers: customers.map(customer => ({
+      ...publicCustomer(customer),
+      orderCount: customer.orders.length,
+      totalSpent: customer.orders.reduce((sum, order) => sum + Number(order.total), 0),
+      createdAt: customer.createdAt.getTime()
+    })) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.put('/api/admin/orders/:id/status', requireAdmin, async (req, res, next) => {
   try {
     const status = String(req.body?.status || '');
@@ -477,21 +512,26 @@ app.post('/api/orders', async (req, res, next) => {
       if (!shipping.eligible) throw new OrderRequestError(400, shipping.message, { country: payload.delivery.country });
       const totals = calculateOrderTotal(validation.items, shipping.shippingFee, 0);
       const email = payload.customer.email.trim().toLowerCase();
+      const customerAddress = {
+        line1: payload.delivery.street,
+        city: payload.delivery.city,
+        state: payload.delivery.region || '',
+        country: payload.delivery.country,
+        postal: payload.delivery.postalCode || ''
+      };
       const customer = await tx.customer.upsert({
         where: { email },
         create: {
           name: payload.customer.name,
           email,
-          phone: payload.customer.phone,
-          address: {
-            line1: payload.delivery.street,
-            city: payload.delivery.city,
-            state: payload.delivery.region || '',
-            country: payload.delivery.country,
-            postal: payload.delivery.postalCode || ''
-          }
+          phone: payload.customer.phone || null,
+          address: customerAddress
         },
-        update: { name: payload.customer.name, phone: payload.customer.phone }
+        update: {
+          name: payload.customer.name,
+          ...(payload.customer.phone ? { phone: payload.customer.phone } : {}),
+          address: customerAddress
+        }
       });
 
       for (const item of validation.items) {

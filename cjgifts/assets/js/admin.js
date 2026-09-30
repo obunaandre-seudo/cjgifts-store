@@ -75,6 +75,13 @@ async function refreshAdminOrders() {
   Orders.replace(result.orders);
 }
 
+async function refreshAdminCustomers() {
+  const response = await fetch('/api/admin/customers', { credentials: 'same-origin' });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to load customers.');
+  return result.customers;
+}
+
 function setAdminOrderRefreshMessage(message = '') {
   const notice = document.getElementById('adminOrderRefreshMessage');
   if (notice) {
@@ -395,26 +402,33 @@ async function updateOrderStatus(id, status) {
 async function initAdminCustomersPage() {
   if (!await requireAdmin()) return;
   renderAdminShell('customers');
-  renderAdminCustomersTable();
+  await renderAdminCustomersTable();
   document.getElementById('adminCustomerSearch').addEventListener('input', renderAdminCustomersTable);
 }
-function renderAdminCustomersTable() {
+async function renderAdminCustomersTable() {
   const q = (document.getElementById('adminCustomerSearch')?.value || '').toLowerCase();
-  let list = Auth.users();
+  let list;
+  try { list = await refreshAdminCustomers(); }
+  catch (error) {
+    document.getElementById('adminCustomersBody').innerHTML = `<tr><td colspan="7">${adminEscapeHTML(error.message || 'Unable to load customers.')}</td></tr>`;
+    return;
+  }
   if (q) list = list.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
 
   const body = document.getElementById('adminCustomersBody');
   body.innerHTML = list.length ? list.map(u => {
-    const orders = Orders.byUser(u.id);
-    const spent = orders.reduce((s,o)=>s+o.total,0);
+    const address = u.address || {};
+    const addressText = [address.line1, address.city, address.state, address.postal, address.country]
+      .filter(Boolean).map(adminEscapeHTML).join(', ');
     return `
     <tr>
-      <td><strong>${u.name}</strong></td>
-      <td>${u.email}</td>
+      <td><strong>${adminEscapeHTML(u.name)}</strong></td>
+      <td>${adminEscapeHTML(u.email)}</td>
       <td>${u.phone || '—'}</td>
-      <td>${orders.length}</td>
-      <td>${formatPrice(spent)}</td>
+      <td>${addressText || '—'}</td>
+      <td>${u.orderCount}</td>
+      <td>${formatPrice(u.totalSpent)}</td>
       <td>${new Date(u.createdAt).toLocaleDateString()}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:30px;">No customers yet</td></tr>`;
+  }).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No customers yet</td></tr>`;
 }

@@ -15,6 +15,7 @@ test('checkout order is stored and visible with its purchased items to admin', a
     productFindMany: prisma.product.findMany,
     productUpdateMany: prisma.product.updateMany,
     customerUpsert: prisma.customer.upsert,
+    customerFindMany: prisma.customer.findMany,
     orderCreate: prisma.order.create,
     orderFindUnique: prisma.order.findUnique,
     orderFindMany: prisma.order.findMany,
@@ -30,6 +31,7 @@ test('checkout order is stored and visible with its purchased items to admin', a
   let stock = 6;
   let savedOrder = null;
   let savedPayment = null;
+  let savedCustomerInput = null;
 
   prisma.product.findMany = async () => [{
     id: 'gift-product-test', sku: 'TEST-GIFT', name: 'Test Gift Box', published: true,
@@ -40,7 +42,16 @@ test('checkout order is stored and visible with its purchased items to admin', a
     stock -= data.stock.decrement;
     return { count: 1 };
   };
-  prisma.customer.upsert = async () => customer;
+  prisma.customer.upsert = async input => {
+    savedCustomerInput = input;
+    return { ...customer, phone: input.create.phone, address: input.create.address };
+  };
+  prisma.customer.findMany = async () => [{
+    ...customer,
+    address: savedCustomerInput?.update.address,
+    orders: [{ total: 52 }],
+    createdAt: dates
+  }];
   prisma.order.create = async ({ data }) => {
     savedOrder = {
       id: 'order-checkout-test', orderNumber: data.orderNumber, accessToken: data.accessToken,
@@ -93,6 +104,12 @@ test('checkout order is stored and visible with its purchased items to admin', a
     assert.equal(created.order.items[0].name, 'Test Gift Box');
     assert.equal(created.order.items[0].quantity, 2);
     assert.equal(stock, 4);
+    assert.equal(savedCustomerInput.create.phone, customer.phone);
+    assert.deepEqual(savedCustomerInput.create.address, {
+      line1: '1 Test Street', city: 'Test City', state: 'CA', country: 'United States', postal: ''
+    });
+    assert.equal(savedCustomerInput.update.phone, customer.phone);
+    assert.deepEqual(savedCustomerInput.update.address, savedCustomerInput.create.address);
 
     const paymentResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -117,12 +134,22 @@ test('checkout order is stored and visible with its purchased items to admin', a
     assert.equal(admin.orders[0].items[0].name, 'Test Gift Box');
     assert.equal(admin.orders[0].items[0].quantity, 2);
     assert.equal(admin.orders[0].paymentStatus, 'Paid');
+
+    const customersResponse = await fetch(`${baseUrl}/api/admin/customers`, {
+      headers: { Cookie: 'cjgifts_admin_session=test-session' }
+    });
+    const customers = await customersResponse.json();
+    assert.equal(customersResponse.status, 200);
+    assert.equal(customers.customers[0].phone, customer.phone);
+    assert.equal(customers.customers[0].address.city, 'Test City');
+    assert.equal(customers.customers[0].orderCount, 1);
   } finally {
     await new Promise(resolve => listener.close(resolve));
     prisma.$transaction = original.transaction;
     prisma.product.findMany = original.productFindMany;
     prisma.product.updateMany = original.productUpdateMany;
     prisma.customer.upsert = original.customerUpsert;
+    prisma.customer.findMany = original.customerFindMany;
     prisma.order.create = original.orderCreate;
     prisma.order.findUnique = original.orderFindUnique;
     prisma.order.findMany = original.orderFindMany;

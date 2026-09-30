@@ -19,6 +19,16 @@
     <form id="registerForm">
       <div class="form-group"><label>Full Name</label><input id="regName" required></div>
       <div class="form-group"><label>Email</label><input type="email" id="regEmail" required></div>
+      <div class="form-group"><label>Phone</label><input type="tel" id="regPhone" autocomplete="tel"></div>
+      <div class="form-group"><label>Street Address</label><input id="regAddress" autocomplete="street-address"></div>
+      <div class="form-row">
+        <div class="form-group"><label>City</label><input id="regCity" autocomplete="address-level2"></div>
+        <div class="form-group"><label>State / Region</label><input id="regState" autocomplete="address-level1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Country</label><input id="regCountry" autocomplete="country-name"></div>
+        <div class="form-group"><label>Postal Code</label><input id="regPostal" autocomplete="postal-code"></div>
+      </div>
       <div class="form-group"><label>Password</label><input type="password" id="regPassword" required minlength="6"></div>
       <button type="submit" class="btn btn-gold btn-block">Create Account</button>
     </form>
