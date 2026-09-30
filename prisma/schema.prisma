@@ -18,12 +18,22 @@ model Customer {
 }
 
 model AdminUser {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  role      String   @default("admin")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  role         String         @default("admin")
+  sessions     AdminSession[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
 }
 
 model Product {

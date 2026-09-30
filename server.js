@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
@@ -7,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
 import { readStore, writeStore, buildOrderNumber, orderAccessToken } from './src/lib/store.js';
+import { prisma } from './src/lib/prisma.js';
 import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference, canTransitionStatus, PAYMENT_STATUSES } from './src/lib/validation.js';
 
 const app = express();
@@ -14,12 +16,10 @@ const PORT = Number(process.env.PORT || 3001);
 const ROOT_DIR = process.cwd();
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_placeholder';
-const ADMIN_DEFAULT_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_DEFAULT_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
+const ADMIN_SESSION_COOKIE = 'cjgifts_admin_session';
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
-app.use(express.static(path.join(ROOT_DIR, 'cjgifts')));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -30,102 +30,241 @@ function errorResponse(res, status, message, details) {
   return res.status(status).json(payload);
 }
 
-async function requireSession(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+function serializeProduct(product) {
+  return {
+    ...product,
+    price: Number(product.price),
+    salePrice: product.salePrice === null ? null : Number(product.salePrice),
+    createdAt: product.createdAt.getTime(),
+    updatedAt: product.updatedAt.getTime()
+  };
+}
 
-  if (!token) {
-    return errorResponse(res, 401, 'Authentication required.');
+function parseProductInput(body = {}) {
+  const name = String(body.name || '').trim();
+  const sku = String(body.sku || '').trim();
+  const slug = String(body.slug || name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const price = Number(body.price);
+  const salePrice = body.salePrice === null || body.salePrice === '' || body.salePrice === undefined ? null : Number(body.salePrice);
+  const stock = Number(body.stock);
+  const images = Array.isArray(body.images) ? body.images.filter((image) => typeof image === 'string' && image.length > 0) : [];
+  const categories = new Set(['gift-ideas', 'products-accessories']);
+
+  if (!name || !sku || !slug || !categories.has(body.category) || !Number.isFinite(price) || price < 0 ||
+      (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0)) || !Number.isInteger(stock) || stock < 0 || images.length === 0) {
+    return null;
   }
 
-  const store = await readStore();
-  const session = store.sessions.find((entry) => entry.token === token && entry.expiresAt > Date.now());
+  return {
+    name,
+    sku,
+    slug,
+    shortDescription: String(body.shortDescription || ''),
+    description: String(body.description || ''),
+    price,
+    salePrice,
+    stock,
+    category: body.category,
+    featured: Boolean(body.featured),
+    specialOffer: Boolean(body.specialOffer),
+    published: Boolean(body.published),
+    images,
+    variants: Array.isArray(body.variants) ? body.variants : []
+  };
+}
 
-  if (!session) {
-    return errorResponse(res, 401, 'Session expired or invalid.');
+function readAdminCookie(req) {
+  const prefix = `${ADMIN_SESSION_COOKIE}=`;
+  const entry = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  return entry ? entry.slice(prefix.length) : null;
+}
+
+function setAdminCookie(req, res, token, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
+  const secureFlag = secure ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${secureFlag}`);
+}
+
+function clearAdminCookie(req, res) {
+  const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function hashSessionToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+async function getAdminSession(req) {
+  const token = readAdminCookie(req);
+  if (!token) return null;
+
+  const session = await prisma.adminSession.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    include: { admin: true }
+  });
+
+  if (!session || session.expiresAt <= new Date() || session.admin.role !== 'admin') {
+    if (session) await prisma.adminSession.delete({ where: { id: session.id } });
+    return null;
   }
 
-  req.user = session.user;
-  req.session = session;
-  next();
+  return session;
 }
 
 async function requireAdmin(req, res, next) {
-  await requireSession(req, res, () => {
-    if (!req.user || req.user.role !== 'super_admin') {
-      return errorResponse(res, 403, 'Admin access required.');
-    }
-    next();
-  });
-}
-
-async function ensureAdminUser() {
-  const store = await readStore();
-  const existing = store.admins?.find((user) => user.username === ADMIN_DEFAULT_USERNAME);
-
-  if (!existing) {
-    store.admins = [
-      {
-        id: 'admin-1',
-        username: ADMIN_DEFAULT_USERNAME,
-        passwordHash: bcrypt.hashSync(ADMIN_DEFAULT_PASSWORD, 10),
-        role: 'super_admin',
-        createdAt: Date.now()
-      }
-    ];
-
-    await writeStore(store);
+  try {
+    const session = await getAdminSession(req);
+    if (!session) return errorResponse(res, 401, 'Admin authentication required.');
+    req.admin = session.admin;
+    req.adminSession = session;
+    return next();
+  } catch (error) {
+    return next(error);
   }
 }
 
+async function ensureConfiguredAdmin() {
+  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 12) return null;
+
+  let admin = await prisma.adminUser.findUnique({ where: { email } });
+  const passwordMatches = admin && await bcrypt.compare(password, admin.passwordHash);
+  if (!admin || !passwordMatches) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    if (!admin) {
+      admin = await prisma.adminUser.create({ data: { email, passwordHash, role: 'admin' } });
+    } else {
+      await prisma.adminSession.deleteMany({ where: { adminId: admin.id } });
+      admin = await prisma.adminUser.update({ where: { id: admin.id }, data: { passwordHash } });
+    }
+  }
+
+  return admin;
+}
+
+app.use('/admin', async (req, res, next) => {
+  if (req.path === '/login.html') return res.redirect('/login.html?admin=1');
+  if (!req.path.endsWith('.html')) return next();
+  try {
+    if (!(await getAdminSession(req))) return res.redirect('/admin/login.html');
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
+app.use(express.static(path.join(ROOT_DIR, 'cjgifts')));
+
 app.get('/api/health', async (req, res) => {
   const store = await readStore();
-  res.json({ ok: true, status: 'ok', products: store.products.length, orders: store.orders.length, timestamp: Date.now() });
+  await prisma.$queryRaw`SELECT 1`;
+  res.json({ ok: true, status: 'ok', database: 'connected', products: store.products.length, orders: store.orders.length, timestamp: Date.now() });
 });
 
 app.get('/api/products', async (req, res) => {
-  const store = await readStore();
-  res.json({ ok: true, products: store.products || [] });
+  const products = await prisma.product.findMany({ where: { published: true }, orderBy: { createdAt: 'desc' } });
+  res.json({ ok: true, products: products.map(serializeProduct) });
 });
 
 app.get('/api/products/:id', async (req, res) => {
-  const store = await readStore();
-  const product = (store.products || []).find((entry) => entry.id === req.params.id);
+  const product = await prisma.product.findFirst({
+    where: { OR: [{ id: req.params.id }, { slug: req.params.id }, { sku: req.params.id }], published: true }
+  });
 
   if (!product) {
     return errorResponse(res, 404, 'Product not found.');
   }
 
-  res.json({ ok: true, product });
+  res.json({ ok: true, product: serializeProduct(product) });
 });
 
-app.post('/api/admin/login', async (req, res) => {
-  const { username, password } = req.body || {};
+app.post('/api/admin/login', async (req, res, next) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    if (!email || !password) return errorResponse(res, 400, 'Email and password are required.');
 
-  if (!username || !password) {
-    return errorResponse(res, 400, 'Username and password are required.');
+    const admin = await ensureConfiguredAdmin();
+    if (!admin) return errorResponse(res, 503, 'Admin sign-in is not configured. Set ADMIN_EMAIL and a 12-character-or-longer ADMIN_PASSWORD.');
+    if (!await bcrypt.compare(password, admin.passwordHash)) return errorResponse(res, 401, 'Invalid email or password.');
+
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    await prisma.adminSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+    await prisma.adminSession.create({
+      data: { tokenHash: hashSessionToken(token), adminId: admin.id, expiresAt }
+    });
+
+    setAdminCookie(req, res, token, Math.floor(SESSION_TTL_MS / 1000));
+    return res.json({ ok: true, admin: { email: admin.email } });
+  } catch (error) {
+    return next(error);
   }
+});
 
-  await ensureAdminUser();
-  const store = await readStore();
-  const admin = store.admins.find((entry) => entry.username === username);
+app.get('/api/admin/session', requireAdmin, (req, res) => {
+  res.json({ ok: true, admin: { email: req.admin.email } });
+});
 
-  if (!admin || !bcrypt.compareSync(password, admin.passwordHash)) {
-    return errorResponse(res, 401, 'Invalid admin login credentials.');
+app.post('/api/admin/logout', async (req, res, next) => {
+  try {
+    const token = readAdminCookie(req);
+    if (token) await prisma.adminSession.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+    clearAdminCookie(req, res);
+    return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
   }
+});
 
-  const token = uuidv4();
-  const session = {
-    id: uuidv4(),
-    token,
-    user: { id: admin.id, username: admin.username, role: admin.role },
-    expiresAt: Date.now() + SESSION_TTL_MS
-  };
+app.get('/api/admin/products', requireAdmin, async (req, res, next) => {
+  try {
+    const products = await prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    return res.json({ ok: true, products: products.map(serializeProduct) });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-  store.sessions = [...(store.sessions || []).filter((entry) => entry.user?.username !== admin.username), session];
-  await writeStore(store);
+app.post('/api/admin/products', requireAdmin, async (req, res, next) => {
+  try {
+    const data = parseProductInput(req.body);
+    if (!data) return errorResponse(res, 400, 'Product details are invalid.');
+    const product = await prisma.product.create({ data });
+    return res.status(201).json({ ok: true, product: serializeProduct(product) });
+  } catch (error) {
+    if (error.code === 'P2002') return errorResponse(res, 409, 'A product with that SKU or slug already exists.');
+    return next(error);
+  }
+});
 
-  res.json({ ok: true, token, user: session.user });
+app.put('/api/admin/products/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const data = parseProductInput(req.body);
+    if (!data) return errorResponse(res, 400, 'Product details are invalid.');
+    const product = await prisma.product.update({ where: { id: req.params.id }, data });
+    return res.json({ ok: true, product: serializeProduct(product) });
+  } catch (error) {
+    if (error.code === 'P2002') return errorResponse(res, 409, 'A product with that SKU or slug already exists.');
+    if (error.code === 'P2025') return errorResponse(res, 404, 'Product not found.');
+    return next(error);
+  }
+});
+
+app.delete('/api/admin/products/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const product = await prisma.product.update({ where: { id: req.params.id }, data: { published: false } });
+    return res.json({ ok: true, product: serializeProduct(product) });
+  } catch (error) {
+    if (error.code === 'P2025') return errorResponse(res, 404, 'Product not found.');
+    return next(error);
+  }
 });
 
 app.get('/api/admin/orders', requireAdmin, async (req, res) => {
@@ -376,11 +515,6 @@ app.get('/api/customer/orders', async (req, res) => {
   res.json({ ok: true, orders });
 });
 
-app.get('/api/debug', async (req, res) => {
-  const store = await readStore();
-  res.json({ ok: true, admin: { username: ADMIN_DEFAULT_USERNAME, hasSecret: Boolean(PAYSTACK_SECRET_KEY), publicKey: PAYSTACK_PUBLIC_KEY }, orderCount: store.orders.length });
-});
-
 app.get('*', (req, res) => {
   res.sendFile(path.join(ROOT_DIR, 'cjgifts', 'index.html'));
 });
@@ -390,9 +524,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ ok: false, message: 'Internal server error.' });
 });
 
-app.listen(PORT, async () => {
-  await ensureAdminUser();
-  console.log(`CJ Gifts backend listening on http://localhost:${PORT}`);
-});
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`CJ Gifts backend listening on http://localhost:${PORT}`);
+  });
+}
 
 export default app;

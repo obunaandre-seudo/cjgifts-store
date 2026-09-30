@@ -1,9 +1,7 @@
 /* ============================================================
    CJ GIFTS — DATA LAYER
-   Uses browser localStorage as the "database".
-   All products are seeded once, then everything (add/edit/delete
-   product, orders, customers, cart) happens through the admin
-   dashboard / customer flows just like a real backend would.
+  Uses browser localStorage for storefront data and cart state.
+  Admin authentication is handled by the server.
    ============================================================ */
 
 const DB_KEYS = {
@@ -12,8 +10,6 @@ const DB_KEYS = {
   USERS: 'cjgifts_users',
   CURRENT_USER: 'cjgifts_current_user',
   ORDERS: 'cjgifts_orders',
-  ADMIN: 'cjgifts_admin',
-  ADMIN_SESSION: 'cjgifts_admin_session',
   WISHLIST: 'cjgifts_wishlist',
   SEEDED: 'cjgifts_seeded_v2'
 };
@@ -150,13 +146,14 @@ function dbGet(key, fallback) {
 function dbSet(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 
 function seedDatabase() {
+  localStorage.removeItem('cjgifts_admin');
+  localStorage.removeItem('cjgifts_admin_session');
   if (!dbGet(DB_KEYS.SEEDED, false)) {
     dbSet(DB_KEYS.PRODUCTS, SEED_PRODUCTS);
     dbSet(DB_KEYS.USERS, []);
     dbSet(DB_KEYS.ORDERS, []);
     dbSet(DB_KEYS.CART, []);
     dbSet(DB_KEYS.WISHLIST, []);
-    dbSet(DB_KEYS.ADMIN, { username: 'admin', password: btoa('admin123'), name: 'Store Admin' });
     dbSet(DB_KEYS.SEEDED, true);
   }
   if (!dbGet(DB_KEYS.PRODUCTS)) dbSet(DB_KEYS.PRODUCTS, SEED_PRODUCTS);
@@ -194,8 +191,18 @@ const Products = {
   related(product, n = 4) {
     return this.published().filter(p => p.category === product.category && p.id !== product.id).slice(0, n);
   },
+  async refreshFromServer() {
+    const response = await fetch('/api/products', { credentials: 'same-origin' });
+    if (!response.ok) throw new Error('Unable to load the database catalog.');
+    const result = await response.json();
+    if (!result.ok || !Array.isArray(result.products)) throw new Error('Invalid database catalog response.');
+    dbSet(DB_KEYS.PRODUCTS, result.products);
+  },
+  replace(products) { dbSet(DB_KEYS.PRODUCTS, products); },
   newId() { return 'p' + Date.now(); }
 };
+
+const productsReady = Products.refreshFromServer().catch(() => false);
 
 /* ---------------- cart helpers ---------------- */
 const Cart = {
@@ -267,21 +274,6 @@ const Auth = {
     const users = this.users().map(u => u.id === id ? {...u, ...patch} : u);
     dbSet(DB_KEYS.USERS, users);
   }
-};
-
-/* ---------------- admin auth ---------------- */
-const AdminAuth = {
-  info() { return dbGet(DB_KEYS.ADMIN, { username: 'admin', password: btoa('admin123') }); },
-  login(username, password) {
-    const info = this.info();
-    if (info.username === username && info.password === btoa(password)) {
-      dbSet(DB_KEYS.ADMIN_SESSION, true);
-      return true;
-    }
-    return false;
-  },
-  isLoggedIn() { return dbGet(DB_KEYS.ADMIN_SESSION, false); },
-  logout() { localStorage.removeItem(DB_KEYS.ADMIN_SESSION); }
 };
 
 /* ---------------- orders ---------------- */

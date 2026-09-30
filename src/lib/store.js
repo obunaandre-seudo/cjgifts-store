@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,15 +64,6 @@ export const seedProducts = [
 const defaultStore = {
   products: seedProducts,
   users: [],
-  admins: [
-    {
-      id: 'admin-1',
-      username: 'admin',
-      passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10),
-      role: 'super_admin',
-      createdAt: Date.now()
-    }
-  ],
   orders: [],
   payments: [],
   paymentEvents: [],
@@ -82,8 +72,7 @@ const defaultStore = {
     { code: 'US', country: 'United States', defaultShippingFee: 12 },
     { code: 'GB', country: 'United Kingdom', defaultShippingFee: 14 },
     { code: 'KE', country: 'Kenya', defaultShippingFee: 9 }
-  ],
-  sessions: []
+  ]
 };
 
 export async function ensureStore() {

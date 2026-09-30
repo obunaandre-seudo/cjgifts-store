@@ -35,14 +35,17 @@ This project adds a real backend layer for the CJ Gifts storefront. The frontend
 
 ## Admin setup
 
-Default local admin credentials are seeded with the environment values in `.env`.
+Admin access uses the Neon database and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in Vercel Project Settings → Environment Variables (and in `.env` for local development). Use a unique password with at least 12 characters. The configured admin account is provisioned in Neon on the first successful setup; there is no browser-stored or demo login.
 
-For a local default:
+Set `DATABASE_URL` in Vercel to the Neon connection string. The admin password is stored as a bcrypt hash, and session tokens are stored hashed in the database. Do not put real credentials in Git or share them in chat.
 
-- username: `admin`
-- password: `admin123`
+After configuring `DATABASE_URL`, apply the schema and create the sample catalog with:
 
-Change them before production use and never commit real credentials.
+```sh
+npm run db:generate
+npm run db:push
+npm run db:seed
+```
 
 ## Paystack configuration
 
@@ -66,6 +69,6 @@ This includes validation tests for totals, cart rules, and duplicate payment han
 
 ## Notes
 
-- The local development implementation uses a JSON store instead of PostgreSQL to keep setup lightweight.
-- For production, move this to a managed PostgreSQL + Prisma setup following the same API contracts.
+- Admin identity, sessions, and the public product API use Neon/PostgreSQL through Prisma.
+- Other local storefront state such as customer accounts, cart contents, and orders still uses the JSON/browser storage implementation and is not yet cross-device persistent.
 - Shipping and delivery zones are intentionally configurable and honest: unsupported destinations are blocked rather than guessed.

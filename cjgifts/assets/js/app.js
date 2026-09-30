@@ -56,7 +56,8 @@ function skeletonGrid(n) {
 }
 
 /* ---------- homepage ---------- */
-function initHomePage() {
+async function initHomePage() {
+  await productsReady;
   const featuredEl = document.getElementById('featuredGrid');
   const newEl = document.getElementById('newArrivalsGrid');
   const offersEl = document.getElementById('offersGrid');
@@ -94,7 +95,8 @@ function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-function initShopPage(fixedCategory) {
+async function initShopPage(fixedCategory) {
+  await productsReady;
   const grid = document.getElementById('productGrid');
   const resultCount = document.getElementById('resultCount');
   const toolbarSearch = document.getElementById('toolbarSearch');
@@ -169,7 +171,8 @@ function initShopPage(fixedCategory) {
 /* ---------- product detail page ---------- */
 let PD_STATE = { selectedVariants: {}, qty: 1, activeImage: 0 };
 
-function initProductPage() {
+async function initProductPage() {
+  await productsReady;
   const id = getQueryParam('id');
   const wrap = document.getElementById('productDetailWrap');
   const notFound = document.getElementById('productNotFound');
@@ -281,7 +284,8 @@ function addFromDetail(p, buyNow) {
 }
 
 /* ---------- cart page ---------- */
-function initCartPage() {
+async function initCartPage() {
+  await productsReady;
   renderCartPage();
 }
 function renderCartPage() {
@@ -347,7 +351,8 @@ function changeCartQty(id, variant, delta) {
 }
 
 /* ---------- checkout page ---------- */
-function initCheckoutPage() {
+async function initCheckoutPage() {
+  await productsReady;
   const items = Cart.detailed();
   const empty = document.getElementById('checkoutEmpty');
   const wrap = document.getElementById('checkoutWrap');
@@ -519,12 +524,38 @@ function initAccountPage() {
 function initLoginPage() {
   const form = document.getElementById('loginForm');
   if (!form) return;
-  form.addEventListener('submit', (e) => {
+  const adminMode = getQueryParam('admin') === '1';
+  if (adminMode) {
+    document.getElementById('loginHeading').textContent = 'Admin Sign In';
+    document.getElementById('loginDescription').textContent = 'Sign in to manage CJ Gifts.';
+    document.getElementById('customerAuthSwitch').hidden = true;
+  }
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const res = Auth.login(email, password);
     const err = document.getElementById('loginError');
+
+    if (adminMode) {
+      try {
+        const response = await fetch('/api/admin/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Invalid email or password.');
+        window.location.href = 'admin/dashboard.html';
+      } catch (error) {
+        err.textContent = error.message || 'Unable to reach the sign-in service.';
+        err.style.display = 'block';
+      }
+      return;
+    }
+
+    const res = Auth.login(email, password);
     if (!res.ok) { err.textContent = res.error; err.style.display = 'block'; return; }
     const redirect = getQueryParam('redirect') || 'account.html';
     window.location.href = redirect;

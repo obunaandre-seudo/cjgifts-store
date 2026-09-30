@@ -90,7 +90,7 @@ function siteFooterHTML() {
           <li><a href="about.html">About Us</a></li>
           <li><a href="contact.html">Contact</a></li>
           <li><a href="account.html">My Account</a></li>
-          <li><a href="admin/login.html">Admin Login</a></li>
+          <li><a href="login.html?admin=1">Admin Login</a></li>
         </ul>
       </div>
       <div>

@@ -9,6 +9,7 @@
     "test": "node --test",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force"
   },

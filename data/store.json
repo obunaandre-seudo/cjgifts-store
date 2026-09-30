@@ -60,15 +60,6 @@
     }
   ],
   "users": [],
-  "admins": [
-    {
-      "id": "admin-1",
-      "username": "admin",
-      "passwordHash": "$2a$10$aSGEi8taWenRs4ZtCBa9Pe98Kt0tGM4/ovFShncTcziDRmnajADHa",
-      "role": "super_admin",
-      "createdAt": 1790685193351
-    }
-  ],
   "orders": [],
   "payments": [],
   "paymentEvents": [],
@@ -93,6 +84,5 @@
       "country": "Kenya",
       "defaultShippingFee": 9
     }
-  ],
-  "sessions": []
+  ]
 }

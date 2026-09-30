@@ -2,12 +2,16 @@
    CJ GIFTS — ADMIN DASHBOARD LOGIC
    ============================================================ */
 
-function requireAdmin() {
-  if (!AdminAuth.isLoggedIn()) {
-    window.location.href = 'login.html';
-    return false;
-  }
-  return true;
+async function requireAdmin() {
+  try {
+    const response = await fetch('/api/admin/session', { credentials: 'same-origin' });
+    if (response.ok) {
+      await productsReady;
+      return true;
+    }
+  } catch {}
+  window.location.href = '../login.html?admin=1';
+  return false;
 }
 
 function adminSidebarHTML(active) {
@@ -34,28 +38,24 @@ function renderAdminShell(active) {
   if (toggle) toggle.addEventListener('click', () => side.classList.toggle('open'));
 }
 
-function adminLogout() {
-  AdminAuth.logout();
-  window.location.href = 'login.html';
+async function adminLogout() {
+  try {
+    await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch {}
+  window.location.href = '../login.html?admin=1';
 }
 
-function initAdminLoginPage() {
-  if (AdminAuth.isLoggedIn()) { window.location.href = 'dashboard.html'; return; }
-  const form = document.getElementById('adminLoginForm');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const u = document.getElementById('adminUsername').value;
-    const p = document.getElementById('adminPassword').value;
-    const ok = AdminAuth.login(u, p);
-    const err = document.getElementById('adminLoginError');
-    if (!ok) { err.textContent = 'Invalid admin credentials.'; err.style.display = 'block'; return; }
-    window.location.href = 'dashboard.html';
-  });
+async function refreshAdminProducts() {
+  const response = await fetch('/api/admin/products', { credentials: 'same-origin' });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to load products.');
+  Products.replace(result.products);
 }
 
 /* ---------- dashboard overview ---------- */
-function initAdminDashboard() {
-  if (!requireAdmin()) return;
+async function initAdminDashboard() {
+  if (!await requireAdmin()) return;
+  await refreshAdminProducts();
   renderAdminShell('dashboard');
   const products = Products.all();
   const orders = Orders.all();
@@ -92,8 +92,9 @@ function initAdminDashboard() {
 }
 
 /* ---------- products list ---------- */
-function initAdminProductsPage() {
-  if (!requireAdmin()) return;
+async function initAdminProductsPage() {
+  if (!await requireAdmin()) return;
+  await refreshAdminProducts();
   renderAdminShell('products');
   renderAdminProductsTable();
   document.getElementById('adminProductSearch').addEventListener('input', renderAdminProductsTable);
@@ -124,19 +125,27 @@ function renderAdminProductsTable() {
     </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No products found</td></tr>`;
 }
 
-function deleteAdminProduct(id) {
+async function deleteAdminProduct(id) {
   if (!confirm('Delete this product? This cannot be undone.')) return;
-  Products.remove(id);
-  renderAdminProductsTable();
-  showToast('Product deleted');
+  try {
+    const response = await fetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Unable to archive product.');
+    await refreshAdminProducts();
+    renderAdminProductsTable();
+    showToast('Product archived');
+  } catch (error) {
+    showToast(error.message || 'Unable to archive product.');
+  }
 }
 
 /* ---------- add/edit product ---------- */
 let ADMIN_IMAGES = [];
 let ADMIN_VARIANTS = [];
 
-function initAdminAddProductPage() {
-  if (!requireAdmin()) return;
+async function initAdminAddProductPage() {
+  if (!await requireAdmin()) return;
+  await refreshAdminProducts();
   renderAdminShell('add-product');
 
   const id = getQueryParam('id');
@@ -176,9 +185,9 @@ function initAdminAddProductPage() {
     renderVariantRows();
   });
 
-  document.getElementById('productForm').addEventListener('submit', (e) => {
+  document.getElementById('productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    saveProductForm(id, existing);
+    await saveProductForm(id, existing);
   });
 }
 
@@ -224,14 +233,14 @@ function removeVariant(vi) { ADMIN_VARIANTS.splice(vi,1); renderVariantRows(); }
 function addVariantOption(vi) { ADMIN_VARIANTS[vi].options.push({label:''}); renderVariantRows(); }
 function removeVariantOption(vi,oi) { ADMIN_VARIANTS[vi].options.splice(oi,1); renderVariantRows(); }
 
-function saveProductForm(id, existing) {
+async function saveProductForm(id, existing) {
   const name = document.getElementById('fName').value.trim();
   const price = parseFloat(document.getElementById('fPrice').value);
   if (!name || isNaN(price)) { showToast('Please fill in the required fields'); return; }
 
   const salePriceRaw = document.getElementById('fSalePrice').value;
   const product = {
-    id: id || Products.newId(),
+    id,
     sku: document.getElementById('fSku').value.trim(),
     name,
     shortDescription: document.getElementById('fShortDesc').value.trim(),
@@ -249,14 +258,26 @@ function saveProductForm(id, existing) {
     })),
     createdAt: existing ? existing.createdAt : Date.now()
   };
-  Products.save(product);
-  showToast(existing ? 'Product updated successfully' : 'Product published successfully');
-  setTimeout(() => window.location.href = 'products.html', 700);
+  try {
+    const response = await fetch(id ? `/api/admin/products/${encodeURIComponent(id)}` : '/api/admin/products', {
+      method: id ? 'PUT' : 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Unable to save product.');
+    await refreshAdminProducts();
+    showToast(existing ? 'Product updated successfully' : 'Product published successfully');
+    setTimeout(() => window.location.href = 'products.html', 700);
+  } catch (error) {
+    showToast(error.message || 'Unable to save product.');
+  }
 }
 
 /* ---------- admin orders ---------- */
-function initAdminOrdersPage() {
-  if (!requireAdmin()) return;
+async function initAdminOrdersPage() {
+  if (!await requireAdmin()) return;
   renderAdminShell('orders');
   renderAdminOrdersTable();
   document.getElementById('adminOrderSearch').addEventListener('input', renderAdminOrdersTable);
@@ -293,8 +314,8 @@ function updateOrderStatus(id, status) {
 }
 
 /* ---------- admin customers ---------- */
-function initAdminCustomersPage() {
-  if (!requireAdmin()) return;
+async function initAdminCustomersPage() {
+  if (!await requireAdmin()) return;
   renderAdminShell('customers');
   renderAdminCustomersTable();
   document.getElementById('adminCustomerSearch').addEventListener('input', renderAdminCustomersTable);
