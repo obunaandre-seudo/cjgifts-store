@@ -34,6 +34,7 @@ function errorResponse(res, status, message, details) {
 function serializeProduct(product) {
   return {
     ...product,
+    category: product.category === 'products-accessories' ? 'gift-ideas' : product.category,
     price: Number(product.price),
     salePrice: product.salePrice === null ? null : Number(product.salePrice),
     createdAt: product.createdAt.getTime(),
@@ -49,7 +50,7 @@ function parseProductInput(body = {}) {
   const salePrice = body.salePrice === null || body.salePrice === '' || body.salePrice === undefined ? null : Number(body.salePrice);
   const stock = Number(body.stock);
   const images = Array.isArray(body.images) ? body.images.filter((image) => typeof image === 'string' && image.length > 0) : [];
-  const categories = new Set(['gift-ideas', 'products-accessories']);
+  const categories = new Set(['gift-ideas']);
 
   if (!name || !sku || !slug || !categories.has(body.category) || !Number.isFinite(price) || price < 0 ||
       (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0)) || !Number.isInteger(stock) || stock < 0 || images.length === 0) {

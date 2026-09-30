@@ -15,8 +15,7 @@ const DB_KEYS = {
 };
 
 const CATEGORIES = [
-  { id: 'gift-ideas', name: 'Gift Ideas', slug: 'gift-ideas', icon: '🎁' },
-  { id: 'products-accessories', name: 'Products & Accessories', slug: 'products-and-accessories', icon: '🛍️' }
+  { id: 'gift-ideas', name: 'Gifts', slug: 'gift-ideas', icon: '🎁' }
 ];
 
 function img(seed, w = 700, h = 700) {
@@ -202,7 +201,13 @@ const Products = {
   newId() { return 'p' + Date.now(); }
 };
 
-const productsReady = Products.refreshFromServer().catch(() => false);
+const productsReady = Products.refreshFromServer().then(() => {
+  Products.replace(Products.all().map(product => product.category === 'products-accessories' ? { ...product, category: 'gift-ideas' } : product));
+  return true;
+}).catch(() => {
+  Products.replace(Products.all().map(product => product.category === 'products-accessories' ? { ...product, category: 'gift-ideas' } : product));
+  return false;
+});
 
 /* ---------------- cart helpers ---------------- */
 const Cart = {

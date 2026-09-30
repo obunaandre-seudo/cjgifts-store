@@ -37,7 +37,6 @@ function siteHeaderHTML(active) {
         ${link('index.html','Home','home')}
         ${link('shop.html','Shop','shop')}
         ${link('gift-ideas.html','Gift Ideas','gift')}
-        ${link('products-accessories.html','Products &amp; Accessories','products')}
         ${link('shop.html?offer=1','Special Offers','offers')}
         ${link('about.html','About','about')}
         ${link('contact.html','Contact','contact')}
@@ -48,12 +47,11 @@ function siteHeaderHTML(active) {
     <div class="close-mobile" onclick="document.getElementById('mobileNav').classList.remove('open')">&times;</div>
     <button type="button" class="mobile-theme-toggle theme-toggle" aria-label="${themeLabel}" title="${themeLabel}"><span class="theme-toggle-icon">${themeIcon}</span><span class="theme-toggle-label">${themeLabel}</span></button>
     <form onsubmit="event.preventDefault(); if(this.q.value.trim()) window.location.href='shop.html?search='+encodeURIComponent(this.q.value);" style="margin-bottom:20px;">
-      <input name="q" type="search" placeholder="Search products..." style="width:100%;padding:12px 16px;border-radius:8px;border:none;">
+      <input name="q" type="search" placeholder="Search gifts..." style="width:100%;padding:12px 16px;border-radius:8px;border:none;">
     </form>
     <a href="index.html">Home</a>
     <a href="shop.html">Shop</a>
     <a href="gift-ideas.html">🎁 Gift Ideas</a>
-    <a href="products-accessories.html">🛍️ Products &amp; Accessories</a>
     <a href="shop.html?offer=1">Special Offers</a>
     <a href="about.html">About</a>
     <a href="contact.html">Contact</a>
@@ -68,7 +66,7 @@ function siteFooterHTML() {
     <div class="container footer-grid">
       <div class="footer-brand">
         <a href="index.html" class="logo" style="margin-bottom:14px;"><span class="mark">CJ</span>CJ <span class="accent">Gifts</span></a>
-        <p>A modern shopping destination for thoughtful gifts and everyday essentials — curated with care, delivered with pride.</p>
+        <p>A modern shopping destination for thoughtful gifts for every occasion — curated with care, delivered with pride.</p>
         <div class="social-row">
           <a href="#" title="Facebook">f</a>
           <a href="#" title="Instagram">ig</a>
@@ -79,9 +77,8 @@ function siteFooterHTML() {
       <div>
         <h4>Shop</h4>
         <ul>
-          <li><a href="shop.html">All Products</a></li>
+          <li><a href="shop.html">All Gifts</a></li>
           <li><a href="gift-ideas.html">Gift Ideas</a></li>
-          <li><a href="products-accessories.html">Products &amp; Accessories</a></li>
           <li><a href="shop.html?offer=1">Special Offers</a></li>
         </ul>
       </div>

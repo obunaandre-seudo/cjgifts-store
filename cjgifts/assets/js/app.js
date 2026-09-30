@@ -58,6 +58,25 @@ function skeletonGrid(n) {
 /* ---------- homepage ---------- */
 async function initHomePage() {
   await productsReady;
+  const latestThree = Products.newArrivals(3);
+  document.querySelectorAll('.hero-visual .card-float').forEach((card, index) => {
+    const product = latestThree[index];
+    const image = card.querySelector('img');
+    if (!product || !image) { card.hidden = true; return; }
+    card.hidden = false;
+    image.src = product.images?.[0] || '';
+    image.alt = product.name;
+    card.setAttribute('role', 'link');
+    card.tabIndex = 0;
+    card.setAttribute('aria-label', `View ${product.name}`);
+    card.onclick = () => { window.location.href = `product.html?id=${encodeURIComponent(product.id)}`; };
+    card.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') card.click(); };
+  });
+  const promoImage = document.querySelector('.promo-img img');
+  if (latestThree[0] && promoImage) {
+    promoImage.src = latestThree[0].images?.[0] || promoImage.src;
+    promoImage.alt = latestThree[0].name;
+  }
   const featuredEl = document.getElementById('featuredGrid');
   const newEl = document.getElementById('newArrivalsGrid');
   const offersEl = document.getElementById('offersGrid');
@@ -148,7 +167,7 @@ async function initShopPage(fixedCategory) {
 
       if (resultCount) resultCount.textContent = `${list.length} product${list.length!==1?'s':''} found`;
       grid.innerHTML = list.length ? list.map(productCardHTML).join('') :
-        emptyStateHTML('🔍', 'No products found', 'Try adjusting your search or filters.', fixedCategory ? null : 'shop.html', 'View All Products');
+        emptyStateHTML('🔍', 'No products found', 'Try adjusting your search or filters.', fixedCategory ? null : 'shop.html', 'View All Gifts');
     }, 220);
   }
 
@@ -187,7 +206,7 @@ async function initProductPage() {
   p.variants.forEach(v => { PD_STATE.selectedVariants[v.name] = v.options[0].label; });
 
   document.getElementById('pdCategory').textContent = CATEGORIES.find(c=>c.id===p.category)?.name || '';
-  document.getElementById('pdCategory').href = p.category === 'gift-ideas' ? 'gift-ideas.html' : 'products-accessories.html';
+  document.getElementById('pdCategory').href = 'gift-ideas.html';
   document.getElementById('pdTitle').textContent = p.name;
   document.getElementById('crumbTitle').textContent = p.name;
   document.getElementById('pdDesc').textContent = p.description;
