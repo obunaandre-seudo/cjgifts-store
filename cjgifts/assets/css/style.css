@@ -930,3 +930,87 @@ body{background:#fff;}
   .trust-bar>div{padding:16px 14px;}.trust-bar .t-ic{width:38px;height:38px;font-size:18px;}
   .offers-grid{grid-template-columns:repeat(2,1fr);}.gift-cta{padding:28px 24px;}
 }
+
+/* ---------- persistent dark theme ---------- */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --navy:#f5dfe6;
+  --navy-2:#3c1d29;
+  --navy-light:#ff7894;
+  --gray-50:#171316;
+  --gray-100:#211a1e;
+  --gray-200:#49353e;
+  --gray-400:#c8aeb7;
+  --gray-600:#d9c7cd;
+  --gray-800:#f7edf0;
+  --shadow-soft:0 8px 30px rgba(0,0,0,.22);
+  --shadow-card:0 4px 18px rgba(0,0,0,.28);
+}
+:root[data-theme="dark"] body{background:#171316;color:#f5e9ed;}
+:root[data-theme="dark"] h1,
+:root[data-theme="dark"] h2,
+:root[data-theme="dark"] h3,
+:root[data-theme="dark"] h4{color:#f5dfe6;}
+:root[data-theme="dark"] .main-header{background:#21191e;box-shadow:0 4px 24px rgba(0,0,0,.35);}
+:root[data-theme="dark"] .main-header .logo{color:#f5dfe6;}
+:root[data-theme="dark"] .main-header .icon-btn{color:#f5dfe6;background:#39232c;}
+:root[data-theme="dark"] .main-header .icon-btn:hover{background:#52303d;}
+:root[data-theme="dark"] .top-row .search-box{background:#171316;border-color:#49353e;}
+:root[data-theme="dark"] .top-row .search-box:focus-within{background:#211a1e;}
+:root[data-theme="dark"] .top-row .search-box input{color:#f7edf0;}
+:root[data-theme="dark"] .top-row .search-box input::placeholder{color:#c8aeb7;}
+:root[data-theme="dark"] .hero{background:linear-gradient(135deg,#21191e 0%,#302028 55%,#472332 100%);}
+:root[data-theme="dark"] .hero-visual .card-float{border-color:#30232a;}
+:root[data-theme="dark"] .page-banner{background:linear-gradient(135deg,#21191e,#38232c);border-color:#49353e;color:#f5dfe6;}
+:root[data-theme="dark"] .page-banner h1{color:#f5dfe6;}
+:root[data-theme="dark"] .page-banner p{color:#d9c7cd;}
+:root[data-theme="dark"] .soft-section,
+:root[data-theme="dark"] .product-card,
+:root[data-theme="dark"] .trust-bar,
+:root[data-theme="dark"] .filters-panel,
+:root[data-theme="dark"] .summary-card,
+:root[data-theme="dark"] .admin-panel,
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .stat-card{background:#241b20;border-color:#49353e;color:#f5e9ed;}
+:root[data-theme="dark"] .trust-bar{box-shadow:0 18px 50px rgba(0,0,0,.24);}
+:root[data-theme="dark"] .trust-bar>div{border-color:#49353e;}
+:root[data-theme="dark"] .trust-bar>div:hover{background:#30232a;}
+:root[data-theme="dark"] .trust-bar strong,
+:root[data-theme="dark"] .occ-label{color:#f5dfe6;}
+:root[data-theme="dark"] .trust-bar small{color:#d9c7cd;}
+:root[data-theme="dark"] .occ-circle{background:linear-gradient(145deg,#30232a,#472832);border-color:#65404d;}
+:root[data-theme="dark"] .gift-cta{background:linear-gradient(120deg,#30232a,#472832);border-color:#8b4057;}
+:root[data-theme="dark"] .variant-opt,
+:root[data-theme="dark"] .qty-selector,
+:root[data-theme="dark"] .price-range input,
+:root[data-theme="dark"] .toolbar select,
+:root[data-theme="dark"] .form-group input,
+:root[data-theme="dark"] .form-group select,
+:root[data-theme="dark"] .form-group textarea,
+:root[data-theme="dark"] .newsletter input,
+:root[data-theme="dark"] .search-box{background:#171316;color:#f7edf0;border-color:#49353e;}
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder{color:#b99da7;}
+:root[data-theme="dark"] .newsletter{background:#211a1e;border-color:#49353e;}
+:root[data-theme="dark"] .data-table th,
+:root[data-theme="dark"] .data-table td,
+:root[data-theme="dark"] .cart-table th,
+:root[data-theme="dark"] .cart-table td{border-color:#49353e;}
+:root[data-theme="dark"] .data-table tr:hover{background:#30232a;}
+:root[data-theme="dark"] #site-footer{background:#21151b;}
+:root[data-theme="dark"] .admin-body{background:#171316;}
+.mobile-theme-toggle{display:none;}
+:root[data-theme="dark"] .mobile-nav{background:#21191e;}
+@media (max-width:900px){
+  .main-header #themeToggle{display:none;}
+  .mobile-nav .mobile-theme-toggle{display:flex;align-items:center;gap:12px;width:100%;padding:14px 0;
+    border-bottom:1px solid rgba(255,255,255,.12);border-radius:0;color:#fff;text-align:left;font-size:19px;font-weight:600;}
+}
+@media (max-width:640px){
+  .main-header .container.top-row{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding-left:16px;padding-right:16px;}
+  .main-header .logo{gap:7px;font-size:21px;}
+  .main-header .logo .mark{width:34px;height:34px;font-size:16px;}
+  .header-actions{gap:8px;}
+  .main-header .icon-btn{width:36px;height:36px;}
+  .hamburger{width:24px;}
+}

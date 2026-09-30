@@ -5,13 +5,12 @@
 function siteHeaderHTML(active) {
   const user = Auth.currentUser();
   const link = (href, label, key) => `<a href="${href}" class="${active===key?'active':''}">${label}</a>`;
+  const theme = document.documentElement.dataset.theme;
+  const themeLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  const themeIcon = theme === 'dark'
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.9 13.1A8.5 8.5 0 0 1 10.9 3.1 8.5 8.5 0 1 0 20.9 13.1Z"/></svg>';
   return `
-  <div class="topbar">
-    <div class="container">
-      <span>Free shipping on orders over <span class="gold-txt">$75</span></span>
-      <span>Need help? <span class="gold-txt">support@cjgifts.com</span></span>
-    </div>
-  </div>
   <header class="main-header">
     <div class="container top-row">
       <a href="index.html" class="logo"><span class="mark">CJ</span>CJ <span class="accent">Gifts</span></a>
@@ -20,6 +19,7 @@ function siteHeaderHTML(active) {
           <input name="q" type="text" placeholder="Search gifts, watches, candles...">
         </form>
       <div class="header-actions">
+        <button type="button" class="icon-btn theme-toggle" id="themeToggle" aria-label="${themeLabel}" title="${themeLabel}">${themeIcon}</button>
         <a href="${user ? 'account.html' : 'login.html'}" class="icon-btn" title="${user ? 'My Account' : 'Login'}">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </a>
@@ -46,6 +46,7 @@ function siteHeaderHTML(active) {
   </header>
   <div class="mobile-nav" id="mobileNav">
     <div class="close-mobile" onclick="document.getElementById('mobileNav').classList.remove('open')">&times;</div>
+    <button type="button" class="mobile-theme-toggle theme-toggle" aria-label="${themeLabel}" title="${themeLabel}"><span class="theme-toggle-icon">${themeIcon}</span><span class="theme-toggle-label">${themeLabel}</span></button>
     <form onsubmit="event.preventDefault(); if(this.q.value.trim()) window.location.href='shop.html?search='+encodeURIComponent(this.q.value);" style="margin-bottom:20px;">
       <input name="q" type="search" placeholder="Search products..." style="width:100%;padding:12px 16px;border-radius:8px;border:none;">
     </form>
@@ -86,7 +87,6 @@ function siteFooterHTML() {
       </div>
       <div>
         <h4>Company</h4>
-        <ul>
           <li><a href="about.html">About Us</a></li>
           <li><a href="contact.html">Contact</a></li>
           <li><a href="account.html">My Account</a></li>
@@ -113,12 +113,51 @@ function siteFooterHTML() {
 }
 
 function renderLayout(active) {
+  setTheme(getSavedTheme(), false);
   const h = document.getElementById('site-header');
   const f = document.getElementById('site-footer');
   if (h) h.innerHTML = siteHeaderHTML(active);
   if (f) f.innerHTML = siteFooterHTML();
+  document.querySelectorAll('.theme-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    });
+  });
   updateCartCount();
   initLoveHearts();
+}
+
+function getSavedTheme() {
+  try {
+    return localStorage.getItem('cjgifts_theme') === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+function setTheme(theme, persist = true) {
+  const selectedTheme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = selectedTheme;
+  if (persist) {
+    try {
+      localStorage.setItem('cjgifts_theme', selectedTheme);
+    } catch {}
+  }
+
+  document.querySelectorAll('.theme-toggle').forEach(toggle => {
+    const isDark = selectedTheme === 'dark';
+    const label = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+    toggle.setAttribute('aria-label', label);
+    toggle.title = label;
+    const icon = isDark
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>'
+      : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.9 13.1A8.5 8.5 0 0 1 10.9 3.1 8.5 8.5 0 1 0 20.9 13.1Z"/></svg>';
+    const iconWrapper = toggle.querySelector('.theme-toggle-icon');
+    if (iconWrapper) iconWrapper.innerHTML = icon;
+    else toggle.innerHTML = icon;
+    const textLabel = toggle.querySelector('.theme-toggle-label');
+    if (textLabel) textLabel.textContent = label;
+  });
 }
 
 function initLoveHearts() {
