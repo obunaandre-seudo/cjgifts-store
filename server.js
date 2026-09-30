@@ -144,10 +144,10 @@ async function ensureConfiguredAdmin() {
 }
 
 app.use('/admin', async (req, res, next) => {
-  if (req.path === '/login.html') return res.redirect('/login.html?admin=1');
+  if (req.path === '/login.html') return res.redirect('/login.html');
   if (!req.path.endsWith('.html')) return next();
   try {
-    if (!(await getAdminSession(req))) return res.redirect('/admin/login.html');
+    if (!(await getAdminSession(req))) return res.redirect('/login.html');
     return next();
   } catch (error) {
     return next(error);

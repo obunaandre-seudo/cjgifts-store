@@ -10,7 +10,7 @@ async function requireAdmin() {
       return true;
     }
   } catch {}
-  window.location.href = '../login.html?admin=1';
+  window.location.href = '../login.html';
   return false;
 }
 
@@ -42,7 +42,7 @@ async function adminLogout() {
   try {
     await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
   } catch {}
-  window.location.href = '../login.html?admin=1';
+  window.location.href = '../login.html';
 }
 
 async function refreshAdminProducts() {

@@ -524,35 +524,25 @@ function initAccountPage() {
 function initLoginPage() {
   const form = document.getElementById('loginForm');
   if (!form) return;
-  const adminMode = getQueryParam('admin') === '1';
-  if (adminMode) {
-    document.getElementById('loginHeading').textContent = 'Admin Sign In';
-    document.getElementById('loginDescription').textContent = 'Sign in to manage CJ Gifts.';
-    document.getElementById('customerAuthSwitch').hidden = true;
-  }
-
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const err = document.getElementById('loginError');
 
-    if (adminMode) {
-      try {
-        const response = await fetch('/api/admin/login', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'Invalid email or password.');
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      if (response.ok) {
         window.location.href = 'admin/dashboard.html';
-      } catch (error) {
-        err.textContent = error.message || 'Unable to reach the sign-in service.';
-        err.style.display = 'block';
+        return;
       }
-      return;
+    } catch (error) {
+      // Customer sign-in remains available if the admin endpoint is unreachable.
     }
 
     const res = Auth.login(email, password);
