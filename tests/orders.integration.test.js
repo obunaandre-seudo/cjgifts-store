@@ -126,6 +126,18 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
   try {
     await new Promise(resolve => listener.once('listening', resolve));
     const baseUrl = `http://127.0.0.1:${listener.address().port}`;
+    const malformedPaymentResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{orderId:broken-json}'
+    });
+    assert.equal(malformedPaymentResponse.status, 400);
+    assert.equal((await malformedPaymentResponse.json()).message, 'Invalid request body.');
+
+    const invalidPaymentInputResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: { unexpected: 'object' }, accessToken: 'invalid' })
+    });
+    assert.equal(invalidPaymentInputResponse.status, 400);
+
     const orderResponse = await fetch(`${baseUrl}/api/orders`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

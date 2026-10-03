@@ -626,7 +626,9 @@ app.post('/api/orders', async (req, res, next) => {
 app.post('/api/payments/initiate', async (req, res, next) => {
   try {
     const { orderId, accessToken } = req.body || {};
-    if (!orderId) return errorResponse(res, 400, 'An order is required to start payment.');
+    if (typeof orderId !== 'string' || !orderId.trim() || typeof accessToken !== 'string' || !accessToken.trim()) {
+      return errorResponse(res, 400, 'A valid order and access token are required to start payment.');
+    }
     const paystack = getPaystackCredentials();
     if (!paystack) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
     const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
@@ -824,6 +826,10 @@ app.get('*', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('Unhandled API error:', err);
+  const status = Number(err.statusCode || err.status);
+  if (status >= 400 && status < 500) {
+    return errorResponse(res, status, status === 400 ? 'Invalid request body.' : 'Request could not be processed.');
+  }
   res.status(500).json({ ok: false, message: 'Internal server error.' });
 });
 
