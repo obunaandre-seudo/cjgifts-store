@@ -469,7 +469,7 @@ async function submitOrder(items, subtotal, discount, shipping) {
           unitPrice: Number(item.unitPrice)
         })),
         shippingMethod: 'Standard',
-        currency: 'USD'
+        currency: 'NGN'
       })
     });
     const result = await response.json();

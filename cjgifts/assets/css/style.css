@@ -575,7 +575,7 @@ input,select,textarea{font-family:inherit;}
 .footer-grid ul li{margin-bottom:11px;}
 .footer-grid a{font-size:14px;transition:var(--transition);}
 .footer-grid a:hover{color:var(--gold);padding-left:3px;}
-.footer-brand p{max-width:280px;font-size:14px;}
+.footer-brand p{max-width:280px;font-size:14px;color:#fff;}
 .social-row{display:flex;gap:12px;margin-top:16px;}
 .social-row a{
   width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.06);
