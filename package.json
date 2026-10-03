@@ -4,6 +4,7 @@
   "description": "CJ Gifts e-commerce backend and static storefront",
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
