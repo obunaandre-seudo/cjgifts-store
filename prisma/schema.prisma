@@ -83,6 +83,7 @@ model Order {
   tax              Decimal     @db.Decimal(10, 2)
   currency         String      @default("NGN")
   paymentStatus    String      @default("Pending")
+  paymentMode      String?
   fulfillmentStatus String     @default("Pending")
   deliveryCountry  String
   deliveryCity     String
@@ -116,6 +117,7 @@ model Payment {
   amount       Decimal  @db.Decimal(10, 2)
   currency     String
   provider     String   @default("paystack")
+  mode         String   @default("live")
   status       String   @default("Pending")
   payload      Json?
   createdAt    DateTime @default(now())

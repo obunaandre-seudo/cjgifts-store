@@ -60,9 +60,10 @@ The one-time conversion changes existing USD product prices and sale prices to n
 Set the following variables in production:
 
 - `PAYSTACK_SECRET_KEY`
+- `PAYSTACK_MODE` (`test` or `live`, matching the key prefix)
 - `PUBLIC_APP_URL` (the site origin; use the HTTPS production URL)
 
-Keep `PAYSTACK_SECRET_KEY` only in server environment variables. Use a test key locally; production accepts only a live secret key. Payment initialization and verification fail closed if credentials or the public HTTPS site URL are missing. Orders stay pending until Paystack confirms the exact NGN amount and currency. Configure the Paystack webhook in the dashboard to point at:
+Keep `PAYSTACK_SECRET_KEY` only in server environment variables. Test keys can exercise hosted checkout and webhook confirmation in any environment; test-paid orders are labeled as tests and cannot be fulfilled or included in revenue. Switch both the key and `PAYSTACK_MODE` to live before accepting real orders. Payment initialization and verification fail closed if credentials or the public HTTPS site URL are missing. Orders are confirmed only after Paystack verifies the exact NGN amount and currency. Configure the Paystack webhook in the dashboard to point at:
 
 `https://your-domain.com/api/payments/webhook`
 

@@ -137,7 +137,7 @@ function renderAdminDashboardOrders() {
   const products = Products.all();
   const orders = Orders.all();
   const customers = Auth.users();
-  const revenue = orders.filter(o=>o.paymentStatus==='Paid').reduce((s,o)=>s+o.total,0);
+  const revenue = orders.filter(o=>o.paymentStatus==='Paid' && o.paymentMode!=='test').reduce((s,o)=>s+o.total,0);
   const pending = orders.filter(o=>o.status==='Pending' || o.status === 'Processing').length;
 
   document.getElementById('statProducts').textContent = products.length;
@@ -365,20 +365,23 @@ function renderAdminOrdersTable() {
 
   const statuses = ['Pending','Processing','Preparing','Shipped','Delivered','Cancelled'];
   const body = document.getElementById('adminOrdersBody');
-  body.innerHTML = list.length ? list.map(o => `
+  body.innerHTML = list.length ? list.map(o => {
+    const canFulfill = o.paymentStatus === 'Paid' && o.paymentMode !== 'test';
+    return `
     <tr>
       <td><strong>${o.orderNumber}</strong></td>
       <td>${o.customer.name}<br><span style="font-size:12px;color:var(--gray-600);">${o.customer.email}</span></td>
       <td>${orderItemsHTML(o)}</td>
       <td>${formatPrice(o.total)}</td>
-      <td><span class="badge paid">${o.paymentStatus}</span></td>
+      <td><span class="badge paid">${o.paymentMode==='test'?`Test - ${o.paymentStatus}`:o.paymentStatus}</span></td>
       <td>
         <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--gray-200);font-size:12.5px;">
-          ${statuses.map(s => `<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}
+          ${statuses.map(s => `<option value="${s}" ${o.status===s?'selected':''} ${s!=='Cancelled'&&!canFulfill?'disabled':''}>${s}</option>`).join('')}
         </select>
       </td>
       <td>${new Date(o.createdAt).toLocaleDateString()}</td>
-    </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No orders found</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No orders found</td></tr>`;
 }
 async function updateOrderStatus(id, status) {
   try {
@@ -394,6 +397,8 @@ async function updateOrderStatus(id, status) {
     showToast('Order status updated');
     renderAdminOrdersTable();
   } catch (error) {
+    await refreshAdminOrders().catch(() => {});
+    renderAdminOrdersTable();
     showToast(error.message || 'Unable to update order status.');
   }
 }

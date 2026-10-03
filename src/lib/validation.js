@@ -51,10 +51,10 @@ export function calculateOrderTotal(items, shippingFee = 0, tax = 0) {
 
 export function getShippingFee(country, subtotal = 0) {
   const zoneFee = {
-    Nigeria: 5985,
-    'United States': 15960,
-    'United Kingdom': 18620,
-    Kenya: 11970
+    Nigeria: 6975,
+    'United States': 18600,
+    'United Kingdom': 21700,
+    Kenya: 13950
   };
 
   if (!country) return 0;
@@ -65,7 +65,7 @@ export function getShippingFee(country, subtotal = 0) {
   }
 
   return {
-    shippingFee: Number((subtotal > 199500 ? fee * 0.75 : fee).toFixed(2)),
+    shippingFee: Number((subtotal > 232500 ? fee * 0.75 : fee).toFixed(2)),
     eligible: true,
     message: 'Delivery is available to this destination.'
   };

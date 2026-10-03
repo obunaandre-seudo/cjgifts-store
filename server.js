@@ -98,19 +98,24 @@ function clearAdminCookie(req, res) {
   res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
 }
 
-function getPaystackSecret() {
+function getPaystackCredentials() {
   const key = PAYSTACK_SECRET_KEY.trim();
   if (!key || key.includes('your_paystack')) return null;
-  if (IS_PRODUCTION && !key.startsWith('sk_live_')) return null;
-  return key;
+  const keyMode = key.startsWith('sk_test_') ? 'test' : key.startsWith('sk_live_') ? 'live' : null;
+  const configuredMode = (process.env.PAYSTACK_MODE || keyMode || '').trim().toLowerCase();
+  if (!keyMode || !['test', 'live'].includes(configuredMode) || configuredMode !== keyMode) return null;
+  return { secretKey: key, mode: keyMode };
 }
 
-function getPaymentCallbackUrl() {
+function getPaymentCallbackUrl(order) {
   if (!PUBLIC_APP_URL) return null;
   try {
     const base = new URL(PUBLIC_APP_URL);
     if (IS_PRODUCTION && base.protocol !== 'https:') return null;
-    return new URL('/order-success.html', base).toString();
+    const callback = new URL('/order-success.html', base);
+    callback.searchParams.set('order', order.id);
+    callback.searchParams.set('token', order.accessToken);
+    return callback.toString();
   } catch {
     return null;
   }
@@ -151,6 +156,7 @@ function serializeOrder(order) {
     total: Number(order.total),
     currency: order.currency,
     paymentStatus: order.paymentStatus,
+    paymentMode: order.paymentMode || null,
     fulfillmentStatus: order.fulfillmentStatus,
     status: order.fulfillmentStatus,
     statusHistory: order.statusHistory || [],
@@ -501,6 +507,9 @@ app.put('/api/admin/orders/:id/status', requireAdmin, async (req, res, next) => 
     if (!allowed.includes(status)) return errorResponse(res, 400, 'Order status is invalid.');
     const current = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!current) return errorResponse(res, 404, 'Order not found.');
+    if (status !== 'Cancelled' && current.paymentMode === 'test') {
+      return errorResponse(res, 409, 'Test-mode orders cannot be fulfilled.');
+    }
     if (status !== 'Cancelled' && current.paymentStatus !== 'Paid') {
       return errorResponse(res, 409, 'An order cannot be fulfilled before payment is confirmed.');
     }
@@ -525,6 +534,10 @@ app.post('/api/orders', async (req, res, next) => {
 
   const payload = parsed.data;
   try {
+    const customerSession = await getCustomerSession(req);
+    if (customerSession && customerSession.customer.email !== payload.customer.email.trim().toLowerCase()) {
+      return errorResponse(res, 403, 'Use the email address for your signed-in customer account.');
+    }
     const order = await prisma.$transaction(async (tx) => {
       const products = await tx.product.findMany({
         where: { id: { in: payload.items.map((item) => item.productId) }, published: true }
@@ -614,16 +627,17 @@ app.post('/api/payments/initiate', async (req, res, next) => {
   try {
     const { orderId, accessToken } = req.body || {};
     if (!orderId) return errorResponse(res, 400, 'An order is required to start payment.');
-    const secretKey = getPaystackSecret();
-    const callbackUrl = getPaymentCallbackUrl();
-    if (!secretKey || !callbackUrl) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
+    const paystack = getPaystackCredentials();
+    if (!paystack) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
     const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
     if (!order) return errorResponse(res, 404, 'Order not found.');
     if (!accessToken || order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized order payment.');
     if (order.paymentStatus === 'Paid') return res.json({ ok: true, alreadyPaid: true });
+    const callbackUrl = getPaymentCallbackUrl(order);
+    if (!callbackUrl) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
 
     if (order.currency !== 'NGN') return errorResponse(res, 409, 'This order has an unsupported payment currency.');
-    let payment = await prisma.payment.findFirst({ where: { orderId: order.id, status: 'Pending' }, orderBy: { createdAt: 'desc' } });
+    let payment = await prisma.payment.findFirst({ where: { orderId: order.id, status: 'Pending', mode: paystack.mode }, orderBy: { createdAt: 'desc' } });
     if (!payment) {
       const reference = `cjgifts_${order.id}_${randomBytes(12).toString('hex')}`;
       payment = await prisma.payment.create({ data: {
@@ -631,6 +645,7 @@ app.post('/api/payments/initiate', async (req, res, next) => {
         reference,
         amount: order.total,
         currency: 'NGN',
+        mode: paystack.mode,
         status: 'Pending'
       } });
     }
@@ -643,7 +658,7 @@ app.post('/api/payments/initiate', async (req, res, next) => {
 
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${paystack.secretKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: order.customer.email,
         amount: Math.round(Number(order.total) * 100),
@@ -679,11 +694,12 @@ app.post('/api/payments/verify', async (req, res, next) => {
     if (!accessToken || payment.order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized payment verification.');
     if (payment.status === 'Paid') return res.json({ ok: true, verified: true, order: serializeOrder(payment.order) });
 
-    const secretKey = getPaystackSecret();
-    if (!secretKey) return errorResponse(res, 503, 'Online payment verification is temporarily unavailable.');
+    const paystack = getPaystackCredentials();
+    if (!paystack) return errorResponse(res, 503, 'Online payment verification is temporarily unavailable.');
+    if (payment.mode !== paystack.mode) return errorResponse(res, 409, 'This payment was started in a different Paystack mode.');
     {
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-        method: 'GET', headers: { Authorization: `Bearer ${secretKey}` }
+        method: 'GET', headers: { Authorization: `Bearer ${paystack.secretKey}` }
       });
       const data = await response.json();
       if (!response.ok || !data.status || !data.data) return errorResponse(res, 400, 'Payment verification failed.');
@@ -705,6 +721,7 @@ app.post('/api/payments/verify', async (req, res, next) => {
           where: { id: orderId },
           data: {
             paymentStatus: 'Paid',
+            paymentMode: payment.mode,
             statusHistory: [...(Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : []), { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified successfully.' }]
           }
         });
@@ -721,11 +738,11 @@ app.post('/api/payments/webhook', async (req, res, next) => {
   try {
   const signature = req.headers['x-paystack-signature'];
   const body = req.body || {};
-  const secretKey = getPaystackSecret();
-  if (!signature || !secretKey || !req.rawBody) {
+  const paystack = getPaystackCredentials();
+  if (!signature || !paystack || !req.rawBody) {
     return res.status(401).json({ ok: false, message: 'Webhook signature could not be verified.' });
   }
-  const expected = createHmac('sha512', secretKey).update(req.rawBody).digest();
+  const expected = createHmac('sha512', paystack.secretKey).update(req.rawBody).digest();
   let received;
   try { received = Buffer.from(String(signature), 'hex'); } catch { received = Buffer.alloc(0); }
   if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
@@ -739,6 +756,7 @@ app.post('/api/payments/webhook', async (req, res, next) => {
     include: { order: true }
   });
   if (!payment) return res.status(200).json({ ok: true, received: true, matched: false });
+  if (payment.mode !== paystack.mode) return errorResponse(res, 400, 'Webhook mode does not match this payment.');
   const expectedAmount = Math.round(Number(payment.amount) * 100);
   if (Number(body.data.amount) !== expectedAmount || body.data.currency !== 'NGN' || payment.currency !== 'NGN') {
     return errorResponse(res, 400, 'Webhook payment amount or currency does not match.');
@@ -762,6 +780,7 @@ app.post('/api/payments/webhook', async (req, res, next) => {
       where: { id: payment.orderId, paymentStatus: { not: 'Paid' } },
       data: {
         paymentStatus,
+        paymentMode: payment.mode,
         statusHistory: [...history, { status: paymentStatus, timestamp: new Date().toISOString(), message: `Payment ${paymentStatus.toLowerCase()} confirmed by Paystack webhook.` }]
       }
     });

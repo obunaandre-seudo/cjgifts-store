@@ -344,11 +344,10 @@ function renderCartPage() {
 
   const subtotal = Cart.subtotal();
   const discount = Cart.discount();
-  const shipping = subtotal >= 75 || subtotal === 0 ? 0 : 6.99;
   document.getElementById('sumSubtotal').textContent = formatPrice(subtotal + discount);
   document.getElementById('sumDiscount').textContent = '-' + formatPrice(discount);
-  document.getElementById('sumShipping').textContent = shipping === 0 ? 'Free' : formatPrice(shipping);
-  document.getElementById('sumTotal').textContent = formatPrice(subtotal + shipping);
+  document.getElementById('sumShipping').textContent = 'At checkout';
+  document.getElementById('sumTotal').textContent = formatPrice(subtotal);
   updateCartCount();
 }
 function removeCartItem(e, id, variant) {
@@ -397,15 +396,27 @@ async function initCheckoutPage() {
   `).join('');
   const subtotal = Cart.subtotal();
   const discount = Cart.discount();
-  const shipping = subtotal >= 75 ? 0 : 6.99;
   document.getElementById('coSubtotal').textContent = formatPrice(subtotal+discount);
   document.getElementById('coDiscount').textContent = '-' + formatPrice(discount);
-  document.getElementById('coShipping').textContent = shipping===0 ? 'Free' : formatPrice(shipping);
-  document.getElementById('coTotal').textContent = formatPrice(subtotal+shipping);
+  const shippingFees = { Nigeria: 6975, 'United States': 18600, 'United Kingdom': 21700, Kenya: 13950 };
+  const renderTotals = () => {
+    const country = document.getElementById('coCountry').value;
+    const baseShipping = shippingFees[country];
+    if (!baseShipping) {
+      document.getElementById('coShipping').textContent = country ? 'Unavailable' : 'Select country';
+      document.getElementById('coTotal').textContent = '—';
+      return;
+    }
+    const shipping = subtotal > 232500 ? baseShipping * 0.75 : baseShipping;
+    document.getElementById('coShipping').textContent = formatPrice(shipping);
+    document.getElementById('coTotal').textContent = formatPrice(subtotal + shipping);
+  };
+  document.getElementById('coCountry').addEventListener('change', renderTotals);
+  renderTotals();
 
   document.getElementById('checkoutForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    submitOrder(items, subtotal, discount, shipping);
+    submitOrder(items);
   });
 }
 
@@ -483,7 +494,7 @@ async function submitOrder(items, subtotal, discount, shipping) {
     const paymentResponse = await fetch('/api/payments/initiate', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken, callbackUrl })
+      body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken })
     });
     const payment = await paymentResponse.json();
     if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Order saved, but payment could not be started.');
@@ -677,9 +688,9 @@ function initRegisterPage() {
 async function initOrderSuccessPage() {
   const id = getQueryParam('order');
   const token = getQueryParam('token');
-  const reference = getQueryParam('reference');
+  const reference = getQueryParam('reference') || getQueryParam('trxref');
   const wrap = document.getElementById('successWrap');
-  let order = Orders.byId(id);
+  let order = null;
   if (id && token && reference) {
     try {
       const response = await fetch('/api/payments/verify', {
@@ -692,11 +703,16 @@ async function initOrderSuccessPage() {
     } catch {}
   }
   if (id && token) {
-    try {
-      const response = await fetch(`/api/orders/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { credentials: 'same-origin' });
-      const result = await response.json();
-      if (response.ok && result.ok) order = result.order;
-    } catch {}
+    const attempts = reference ? 12 : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const response = await fetch(`/api/orders/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { credentials: 'same-origin' });
+        const result = await response.json();
+        if (response.ok && result.ok) order = result.order;
+      } catch {}
+      if (order?.paymentStatus === 'Paid' || attempt === attempts - 1) break;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
   }
   if (!order) { wrap.innerHTML = emptyStateHTML('❌','Order not found','We could not locate that order.', 'shop.html', 'Continue Shopping'); return; }
   document.getElementById('successOrderNum').textContent = order.orderNumber;
@@ -704,10 +720,23 @@ async function initOrderSuccessPage() {
   document.getElementById('successEmail').textContent = order.customer.email;
   Orders.replace([order, ...Orders.all().filter(existing => existing.id !== order.id)]);
   if (order.paymentStatus !== 'Paid') {
+    document.querySelector('#successWrap h1').textContent = 'Order Payment Pending';
     const message = wrap.querySelector('.container > p');
     if (message) message.textContent = 'Your order has been saved. Payment is still pending; we will update its status once confirmed.';
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Order Total';
+  } else if (order.paymentMode === 'test') {
+    document.querySelector('#successWrap h1').textContent = 'Test Payment Successful';
+    const message = wrap.querySelector('.container > p');
+    if (message) message.textContent = `Your Paystack test payment succeeded for order ${order.orderNumber}. No real money was charged, and this test order will not be fulfilled.`;
+    const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
+    if (totalLabel) totalLabel.textContent = 'Test Payment';
+  } else {
+    document.querySelector('#successWrap h1').textContent = 'Your Order Has Been Placed';
+    const message = wrap.querySelector('.container > p');
+    if (message) message.textContent = `Payment confirmed for order ${order.orderNumber}. We’ll send updates to ${order.customer.email}.`;
+    const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
+    if (totalLabel) totalLabel.textContent = 'Total Paid';
   }
 }
 

@@ -1,15 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 
 process.env.VERCEL = '1';
-process.env.PAYSTACK_SECRET_KEY = '';
+process.env.PAYSTACK_SECRET_KEY = 'sk_test_integration_only';
+process.env.PAYSTACK_MODE = 'test';
+process.env.PUBLIC_APP_URL = 'https://shop.example.test';
 
 const [{ default: app }, { prisma }] = await Promise.all([
   import('../server.js'),
   import('../src/lib/prisma.js')
 ]);
 
-test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled', async () => {
+test('checkout redirects to Paystack test checkout and confirms payment through verification and webhook', async () => {
   const original = {
     transaction: prisma.$transaction,
     productFindMany: prisma.product.findMany,
@@ -21,9 +24,12 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
     orderFindMany: prisma.order.findMany,
     paymentCreate: prisma.payment.create,
     paymentFindFirst: prisma.payment.findFirst,
+    paymentFindUnique: prisma.payment.findUnique,
     paymentUpdate: prisma.payment.update,
+    paymentUpdateMany: prisma.payment.updateMany,
     orderUpdate: prisma.order.update,
-    adminSessionFindUnique: prisma.adminSession.findUnique
+    adminSessionFindUnique: prisma.adminSession.findUnique,
+    fetch: global.fetch
   };
 
   const dates = new Date();
@@ -32,6 +38,25 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
   let savedOrder = null;
   let savedPayment = null;
   let savedCustomerInput = null;
+  global.fetch = async (input, options = {}) => {
+    const url = String(input);
+    if (url === 'https://api.paystack.co/transaction/initialize') {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.currency, 'NGN');
+      assert.equal(payload.amount, Math.round(Number(savedOrder.total) * 100));
+      assert.match(payload.callback_url, /^https:\/\/shop\.example\.test\/order-success\.html\?order=order-checkout-test&token=.+$/);
+      return { ok: true, json: async () => ({ status: true, data: { reference: payload.reference, authorization_url: 'https://checkout.paystack.com/test-session' } }) };
+    }
+    if (url.startsWith('https://api.paystack.co/transaction/verify/')) {
+      return { ok: true, json: async () => ({ status: true, data: {
+        reference: savedPayment.reference,
+        status: 'success',
+        amount: Math.round(Number(savedPayment.amount) * 100),
+        currency: 'NGN'
+      } }) };
+    }
+    return original.fetch(input, options);
+  };
 
   prisma.product.findMany = async () => [{
     id: 'gift-product-test', sku: 'TEST-GIFT', name: 'Test Gift Box', published: true,
@@ -71,7 +96,13 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
     return savedPayment;
   };
   prisma.payment.findFirst = async () => savedPayment ? { ...savedPayment, order: savedOrder } : null;
+  prisma.payment.findUnique = async () => savedPayment ? { ...savedPayment, order: savedOrder } : null;
   prisma.payment.update = async ({ data }) => { Object.assign(savedPayment, data); return savedPayment; };
+  prisma.payment.updateMany = async ({ where, data }) => {
+    if (!savedPayment || where.id !== savedPayment.id || (where.status === 'Pending' && savedPayment.status !== 'Pending')) return { count: 0 };
+    Object.assign(savedPayment, data);
+    return { count: 1 };
+  };
   prisma.order.update = async ({ data }) => {
     Object.assign(savedOrder, data);
     savedOrder.updatedAt = dates;
@@ -118,25 +149,34 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
       body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken })
     });
     const payment = await paymentResponse.json();
-    assert.equal(paymentResponse.status, 503);
-    assert.equal(payment.ok, false);
-
-    savedPayment = {
-      id: 'payment-checkout-test', orderId: created.order.id, reference: 'pending-reference',
-      amount: created.order.total, currency: 'NGN', status: 'Pending', order: savedOrder
-    };
+    assert.equal(paymentResponse.status, 200);
+    assert.equal(payment.authorizationUrl, 'https://checkout.paystack.com/test-session');
+    assert.equal(savedPayment.mode, 'test');
 
     const verifyResponse = await fetch(`${baseUrl}/api/payments/verify`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken, reference: savedPayment.reference })
     });
-    assert.equal(verifyResponse.status, 503);
+    const verification = await verifyResponse.json();
+    assert.equal(verifyResponse.status, 200);
+    assert.equal(verification.order.paymentStatus, 'Paid');
+    assert.equal(verification.order.paymentMode, 'test');
 
+    const webhookBody = JSON.stringify({ event: 'charge.success', data: {
+      reference: savedPayment.reference,
+      status: 'success',
+      amount: Math.round(Number(savedPayment.amount) * 100),
+      currency: 'NGN'
+    } });
     const webhookResponse = await fetch(`${baseUrl}/api/payments/webhook`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'charge.success', data: { reference: savedPayment.reference, status: 'success' } })
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-paystack-signature': createHmac('sha512', 'sk_test_integration_only').update(webhookBody).digest('hex')
+      },
+      body: webhookBody
     });
-    assert.equal(webhookResponse.status, 401);
+    assert.equal(webhookResponse.status, 200);
 
     const unpaidStatusResponse = await fetch(`${baseUrl}/api/admin/orders/${created.order.id}/status`, {
       method: 'PUT',
@@ -153,7 +193,8 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
     assert.equal(admin.orders.length, 1);
     assert.equal(admin.orders[0].items[0].name, 'Test Gift Box');
     assert.equal(admin.orders[0].items[0].quantity, 2);
-    assert.equal(admin.orders[0].paymentStatus, 'Pending');
+    assert.equal(admin.orders[0].paymentStatus, 'Paid');
+    assert.equal(admin.orders[0].paymentMode, 'test');
 
     const customersResponse = await fetch(`${baseUrl}/api/admin/customers`, {
       headers: { Cookie: 'cjgifts_admin_session=test-session' }
@@ -175,8 +216,11 @@ test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled
     prisma.order.findMany = original.orderFindMany;
     prisma.payment.create = original.paymentCreate;
     prisma.payment.findFirst = original.paymentFindFirst;
+    prisma.payment.findUnique = original.paymentFindUnique;
     prisma.payment.update = original.paymentUpdate;
+    prisma.payment.updateMany = original.paymentUpdateMany;
     prisma.order.update = original.orderUpdate;
     prisma.adminSession.findUnique = original.adminSessionFindUnique;
+    global.fetch = original.fetch;
   }
 });

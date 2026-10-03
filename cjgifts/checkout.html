@@ -35,13 +35,13 @@
             <div class="form-group"><label>State / Region *</label><input id="coState" required><span class="form-error">State is required</span></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label>Country *</label><input id="coCountry" required><span class="form-error">Country is required</span></div>
+            <div class="form-group"><label>Country *</label><select id="coCountry" required><option value="">Select a supported country</option><option value="Nigeria">Nigeria</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="Kenya">Kenya</option></select><span class="form-error">Country is required</span></div>
             <div class="form-group"><label>Postal Code</label><input id="coPostal"></div>
           </div>
         </div>
         <div class="admin-panel">
           <h3>Payment</h3>
-          <p style="font-size:14px;">Secure payment is processed and verified on the server — your card details are never exposed to the browser. This demo simulates a successful Paystack payment for preview purposes.</p>
+          <p style="font-size:14px;">After you place your order, you’ll continue to Paystack’s secure checkout. We’ll confirm your payment before marking the order as paid.</p>
           <div style="display:flex;gap:10px;align-items:center;padding:14px;background:var(--gray-50);border-radius:8px;">
             <span style="font-size:20px;">🔒</span>
             <span style="font-size:13.5px;color:var(--gray-600);">Payment secured &amp; verified via Paystack</span>
@@ -53,10 +53,10 @@
       <div class="summary-card">
         <h3>Order Summary</h3>
         <div id="coItemsSummary" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--gray-200);"></div>
-        <div class="summary-row"><span>Subtotal</span><span id="coSubtotal">$0.00</span></div>
-        <div class="summary-row"><span>Discount</span><span class="promo-badge" id="coDiscount">-$0.00</span></div>
-        <div class="summary-row"><span>Shipping</span><span id="coShipping">Free</span></div>
-        <div class="summary-row total"><span>Total</span><span id="coTotal">$0.00</span></div>
+        <div class="summary-row"><span>Subtotal</span><span id="coSubtotal">₦0</span></div>
+        <div class="summary-row"><span>Discount</span><span class="promo-badge" id="coDiscount">-₦0</span></div>
+        <div class="summary-row"><span>Shipping</span><span id="coShipping">Select country</span></div>
+        <div class="summary-row total"><span>Total</span><span id="coTotal">₦0</span></div>
       </div>
     </div>
 
