@@ -18,16 +18,12 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    showLoader();
-    const started = performance.now();
-    const finish = () => setTimeout(() => {
-      const overlay = document.querySelector('.cj-loader');
-      if (overlay) overlay.classList.add('dismissed');
+    const overlay = showLoader();
+    setTimeout(() => {
+      overlay.classList.add('dismissed');
       document.documentElement.classList.remove('cj-loading');
-      setTimeout(() => overlay?.remove(), 700);
-    }, Math.max(0, (reduced ? 100 : 900) - (performance.now() - started)));
-    if (document.readyState === 'complete') finish();
-    else window.addEventListener('load', finish, { once: true });
+      setTimeout(() => overlay.remove(), 240);
+    }, reduced ? 60 : 90);
   }, { once: true });
 
   document.addEventListener('click', event => {
@@ -38,6 +34,6 @@
     if (destination.origin !== window.location.origin || destination.href === window.location.href) return;
     event.preventDefault();
     showLoader(true);
-    setTimeout(() => { window.location.href = destination.href; }, 280);
+    setTimeout(() => { window.location.href = destination.href; }, 180);
   });
 })();
