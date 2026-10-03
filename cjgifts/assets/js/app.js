@@ -507,7 +507,29 @@ async function submitOrder(items, subtotal, discount, shipping) {
     window.location.href = payment.authorizationUrl;
   } catch (error) {
     if (order) {
-      window.location.href = callbackUrl;
+      btn.disabled = false;
+      btn.textContent = 'Continue to Payment';
+      btn.onclick = async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner"></span> Starting payment...`;
+        try {
+          const paymentResponse = await fetch('/api/payments/initiate', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken })
+          });
+          const payment = await paymentResponse.json();
+          if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Payment could not be started.');
+          window.location.href = payment.alreadyPaid ? callbackUrl : payment.authorizationUrl;
+        } catch (retryError) {
+          btn.disabled = false;
+          btn.textContent = 'Continue to Payment';
+          showToast(retryError.message || 'Payment could not be started. Please try again.');
+        }
+      };
+      showToast(error.message || 'Your order is saved. Continue to payment when ready.');
       return;
     }
     btn.disabled = false;

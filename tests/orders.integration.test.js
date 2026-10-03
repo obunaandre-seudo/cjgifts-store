@@ -28,6 +28,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     paymentUpdate: prisma.payment.update,
     paymentUpdateMany: prisma.payment.updateMany,
     orderUpdate: prisma.order.update,
+    orderUpdateMany: prisma.order.updateMany,
     adminSessionFindUnique: prisma.adminSession.findUnique,
     fetch: global.fetch
   };
@@ -108,6 +109,11 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     savedOrder.updatedAt = dates;
     return savedOrder;
   };
+  prisma.order.updateMany = async ({ data }) => {
+    Object.assign(savedOrder, data);
+    savedOrder.updatedAt = dates;
+    return { count: 1 };
+  };
   prisma.adminSession.findUnique = async () => ({
     expiresAt: new Date(Date.now() + 60_000),
     admin: { role: 'admin', email: 'admin@example.test' }
@@ -153,15 +159,6 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     assert.equal(payment.authorizationUrl, 'https://checkout.paystack.com/test-session');
     assert.equal(savedPayment.mode, 'test');
 
-    const verifyResponse = await fetch(`${baseUrl}/api/payments/verify`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken, reference: savedPayment.reference })
-    });
-    const verification = await verifyResponse.json();
-    assert.equal(verifyResponse.status, 200);
-    assert.equal(verification.order.paymentStatus, 'Paid');
-    assert.equal(verification.order.paymentMode, 'test');
-
     const webhookBody = JSON.stringify({ event: 'charge.success', data: {
       reference: savedPayment.reference,
       status: 'success',
@@ -177,6 +174,19 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
       body: webhookBody
     });
     assert.equal(webhookResponse.status, 200);
+
+    assert.equal(savedPayment.status, 'Paid');
+    assert.equal(savedOrder.paymentStatus, 'Paid');
+    assert.equal(savedOrder.paymentMode, 'test');
+
+    const verifyResponse = await fetch(`${baseUrl}/api/payments/verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken, reference: savedPayment.reference })
+    });
+    const verification = await verifyResponse.json();
+    assert.equal(verifyResponse.status, 200);
+    assert.equal(verification.order.paymentStatus, 'Paid');
+    assert.equal(verification.order.paymentMode, 'test');
 
     const unpaidStatusResponse = await fetch(`${baseUrl}/api/admin/orders/${created.order.id}/status`, {
       method: 'PUT',
@@ -220,6 +230,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     prisma.payment.update = original.paymentUpdate;
     prisma.payment.updateMany = original.paymentUpdateMany;
     prisma.order.update = original.orderUpdate;
+    prisma.order.updateMany = original.orderUpdateMany;
     prisma.adminSession.findUnique = original.adminSessionFindUnique;
     global.fetch = original.fetch;
   }
