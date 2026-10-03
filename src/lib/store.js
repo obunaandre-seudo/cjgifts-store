@@ -13,8 +13,8 @@ export const seedProducts = [
     sku: 'CJG-GD-001',
     name: 'Luxury Watch Gift Set',
     category: 'gift-ideas',
-    price: 252687,
-    salePrice: 199487,
+    price: 294485,
+    salePrice: 232485,
     stock: 24,
     featured: true,
     specialOffer: true,
@@ -30,7 +30,7 @@ export const seedProducts = [
     sku: 'CJG-GD-002',
     name: 'Scented Candle Collection',
     category: 'gift-ideas',
-    price: 71820,
+    price: 83700,
     salePrice: null,
     stock: 60,
     featured: true,
@@ -47,8 +47,8 @@ export const seedProducts = [
     sku: 'CJG-PA-001',
     name: 'Wireless Bluetooth Earbuds',
     category: 'products-accessories',
-    price: 106387,
-    salePrice: 79787,
+    price: 123985,
+    salePrice: 92985,
     stock: 75,
     featured: true,
     specialOffer: true,
@@ -68,10 +68,10 @@ const defaultStore = {
   payments: [],
   paymentEvents: [],
   deliveryZones: [
-    { code: 'NG', country: 'Nigeria', defaultShippingFee: 5985 },
-    { code: 'US', country: 'United States', defaultShippingFee: 15960 },
-    { code: 'GB', country: 'United Kingdom', defaultShippingFee: 18620 },
-    { code: 'KE', country: 'Kenya', defaultShippingFee: 11970 }
+    { code: 'NG', country: 'Nigeria', defaultShippingFee: 6975 },
+    { code: 'US', country: 'United States', defaultShippingFee: 18600 },
+    { code: 'GB', country: 'United Kingdom', defaultShippingFee: 21700 },
+    { code: 'KE', country: 'Kenya', defaultShippingFee: 13950 }
   ]
 };
 

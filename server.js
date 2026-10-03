@@ -7,18 +7,25 @@ import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import { readStore, writeStore, buildOrderNumber } from './src/lib/store.js';
 import { prisma } from './src/lib/prisma.js';
-import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference, canTransitionStatus, PAYMENT_STATUSES } from './src/lib/validation.js';
+import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference } from './src/lib/validation.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const ROOT_DIR = process.cwd();
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_placeholder';
+const ALLOWED_ORIGINS = new Set((process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean));
+const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : IS_PRODUCTION ? '' : `http://localhost:${PORT}`);
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
 const ADMIN_SESSION_COOKIE = 'cjgifts_admin_session';
 const CUSTOMER_SESSION_COOKIE = 'cjgifts_customer_session';
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, !origin || ALLOWED_ORIGINS.has(origin));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '2mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -63,6 +70,7 @@ function parseProductInput(body = {}) {
     description: String(body.description || ''),
     price,
     salePrice,
+    priceCurrency: 'NGN',
     stock,
     category: body.category,
     featured: Boolean(body.featured),
@@ -88,6 +96,24 @@ function setAdminCookie(req, res, token, maxAgeSeconds) {
 function clearAdminCookie(req, res) {
   const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', `${ADMIN_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function getPaystackSecret() {
+  const key = PAYSTACK_SECRET_KEY.trim();
+  if (!key || key.includes('your_paystack')) return null;
+  if (IS_PRODUCTION && !key.startsWith('sk_live_')) return null;
+  return key;
+}
+
+function getPaymentCallbackUrl() {
+  if (!PUBLIC_APP_URL) return null;
+  try {
+    const base = new URL(PUBLIC_APP_URL);
+    if (IS_PRODUCTION && base.protocol !== 'https:') return null;
+    return new URL('/order-success.html', base).toString();
+  } catch {
+    return null;
+  }
 }
 
 function serializeOrder(order) {
@@ -475,6 +501,9 @@ app.put('/api/admin/orders/:id/status', requireAdmin, async (req, res, next) => 
     if (!allowed.includes(status)) return errorResponse(res, 400, 'Order status is invalid.');
     const current = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!current) return errorResponse(res, 404, 'Order not found.');
+    if (status !== 'Cancelled' && current.paymentStatus !== 'Paid') {
+      return errorResponse(res, 409, 'An order cannot be fulfilled before payment is confirmed.');
+    }
     const statusHistory = Array.isArray(current.statusHistory) ? current.statusHistory : [];
     const order = await prisma.order.update({
       where: { id: current.id },
@@ -552,15 +581,15 @@ app.post('/api/orders', async (req, res, next) => {
           shippingFee: totals.shippingFee,
           tax: totals.tax,
           total: totals.total,
-          currency: payload.currency,
+          currency: 'NGN',
           paymentStatus: 'Pending',
-          fulfillmentStatus: 'Processing',
+          fulfillmentStatus: 'Pending',
           deliveryCountry: payload.delivery.country,
           deliveryCity: payload.delivery.city,
           deliveryStreet: payload.delivery.street,
           deliveryRegion: payload.delivery.region || null,
           notes: [payload.delivery.apartment, payload.delivery.instructions].filter(Boolean).join(' — ') || null,
-          statusHistory: [{ status: 'Processing', timestamp: new Date().toISOString(), message: 'Order created and awaiting payment confirmation.' }],
+          statusHistory: [{ status: 'Pending', timestamp: new Date().toISOString(), message: 'Order created and awaiting payment confirmation.' }],
           items: {
             create: validation.items.map((item) => ({
               productId: item.productId,
@@ -583,43 +612,56 @@ app.post('/api/orders', async (req, res, next) => {
 
 app.post('/api/payments/initiate', async (req, res, next) => {
   try {
-    const { orderId, accessToken, callbackUrl } = req.body || {};
+    const { orderId, accessToken } = req.body || {};
     if (!orderId) return errorResponse(res, 400, 'An order is required to start payment.');
+    const secretKey = getPaystackSecret();
+    const callbackUrl = getPaymentCallbackUrl();
+    if (!secretKey || !callbackUrl) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
     const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
     if (!order) return errorResponse(res, 404, 'Order not found.');
     if (!accessToken || order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized order payment.');
     if (order.paymentStatus === 'Paid') return res.json({ ok: true, alreadyPaid: true });
 
-    const reference = `cjgifts_${order.id}_${Date.now()}`;
-    const payment = await prisma.payment.create({ data: {
-      orderId: order.id,
-      reference,
-      amount: order.total,
-      currency: order.currency,
-      status: 'Pending'
-    } });
-
-    if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.includes('your_paystack')) {
-      return res.json({ ok: true, mock: true, reference: payment.reference, authorizationUrl: callbackUrl || '/order-success.html' });
+    if (order.currency !== 'NGN') return errorResponse(res, 409, 'This order has an unsupported payment currency.');
+    let payment = await prisma.payment.findFirst({ where: { orderId: order.id, status: 'Pending' }, orderBy: { createdAt: 'desc' } });
+    if (!payment) {
+      const reference = `cjgifts_${order.id}_${randomBytes(12).toString('hex')}`;
+      payment = await prisma.payment.create({ data: {
+        orderId: order.id,
+        reference,
+        amount: order.total,
+        currency: 'NGN',
+        status: 'Pending'
+      } });
+    }
+    if (Number(payment.amount) !== Number(order.total) || payment.currency !== 'NGN') {
+      return errorResponse(res, 409, 'The payment amount does not match the order.');
+    }
+    if (payment.payload?.authorization_url) {
+      return res.json({ ok: true, authorizationUrl: payment.payload.authorization_url, reference: payment.reference });
     }
 
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: order.customer.email,
-        amount: Number(order.total) * 100,
-        currency: order.currency,
+        amount: Math.round(Number(order.total) * 100),
+        currency: 'NGN',
         reference: payment.reference,
         callback_url: callbackUrl
       })
     });
     const data = await response.json();
     if (!response.ok || !data.status) {
-      await prisma.payment.update({ where: { id: payment.id }, data: { status: 'Failed', payload: data } });
-      return errorResponse(res, 400, 'Unable to initialize Paystack payment.', data);
+      await prisma.payment.updateMany({ where: { id: payment.id, status: 'Pending' }, data: { status: 'Failed' } });
+      return errorResponse(res, 400, 'Unable to initialize Paystack payment.');
     }
-    return res.json({ ok: true, authorizationUrl: data.data.authorization_url, reference: data.data.reference });
+    if (data.data?.reference !== payment.reference || typeof data.data?.authorization_url !== 'string') {
+      return errorResponse(res, 502, 'Paystack returned an invalid payment session.');
+    }
+    await prisma.payment.update({ where: { id: payment.id }, data: { payload: { authorization_url: data.data.authorization_url } } });
+    return res.json({ ok: true, authorizationUrl: data.data.authorization_url, reference: payment.reference });
   } catch (error) {
     return next(error);
   }
@@ -637,48 +679,53 @@ app.post('/api/payments/verify', async (req, res, next) => {
     if (!accessToken || payment.order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized payment verification.');
     if (payment.status === 'Paid') return res.json({ ok: true, verified: true, order: serializeOrder(payment.order) });
 
-    if (PAYSTACK_SECRET_KEY && !PAYSTACK_SECRET_KEY.includes('your_paystack')) {
+    const secretKey = getPaystackSecret();
+    if (!secretKey) return errorResponse(res, 503, 'Online payment verification is temporarily unavailable.');
+    {
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-        method: 'GET', headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` }
+        method: 'GET', headers: { Authorization: `Bearer ${secretKey}` }
       });
       const data = await response.json();
-      if (!response.ok || !data.status) return errorResponse(res, 400, 'Payment verification failed.', data);
-      const verification = verifyPaystackReference({
+      if (!response.ok || !data.status || !data.data) return errorResponse(res, 400, 'Payment verification failed.');
+      const matches = verifyPaystackReference({
         expectedReference: payment.reference,
         receivedReference: data.data.reference,
-        expectedAmount: Number(payment.amount),
-        receivedAmount: Number(data.data.amount) / 100,
-        expectedCurrency: payment.currency,
-        receivedCurrency: data.data.currency || payment.currency
+        expectedAmount: Math.round(Number(payment.amount) * 100),
+        receivedAmount: Number(data.data.amount),
+        expectedCurrency: 'NGN',
+        receivedCurrency: data.data.currency
       });
-      if (!verification.ok || data.data.status !== 'success') return errorResponse(res, 400, verification.reason || 'Payment is not successful.');
+      if (!matches.ok || data.data.status !== 'success') return errorResponse(res, 400, matches.reason || 'Payment is not successful.');
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.updateMany({
+          where: { id: payment.id, status: { not: 'Paid' } },
+          data: { status: 'Paid', payload: { reference: payment.reference, status: 'success', amount: data.data.amount, currency: data.data.currency } }
+        });
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: 'Paid',
+            statusHistory: [...(Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : []), { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified successfully.' }]
+          }
+        });
+      });
     }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const history = Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : [];
-      await tx.payment.update({ where: { id: payment.id }, data: { status: 'Paid' } });
-      return tx.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: 'Paid',
-          statusHistory: [...history, { status: 'Processing', timestamp: new Date().toISOString(), message: 'Payment verified successfully.' }]
-        },
-        include: { customer: true, items: true }
-      });
-    });
+    const updated = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true, items: true } });
     return res.json({ ok: true, verified: true, order: serializeOrder(updated) });
   } catch (error) {
     return next(error);
   }
 });
 
-app.post('/api/payments/webhook', async (req, res) => {
+app.post('/api/payments/webhook', async (req, res, next) => {
+  try {
   const signature = req.headers['x-paystack-signature'];
   const body = req.body || {};
-  if (!signature || !PAYSTACK_SECRET_KEY || !req.rawBody) {
+  const secretKey = getPaystackSecret();
+  if (!signature || !secretKey || !req.rawBody) {
     return res.status(401).json({ ok: false, message: 'Webhook signature could not be verified.' });
   }
-  const expected = createHmac('sha512', PAYSTACK_SECRET_KEY).update(req.rawBody).digest();
+  const expected = createHmac('sha512', secretKey).update(req.rawBody).digest();
   let received;
   try { received = Buffer.from(String(signature), 'hex'); } catch { received = Buffer.alloc(0); }
   if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
@@ -692,21 +739,37 @@ app.post('/api/payments/webhook', async (req, res) => {
     include: { order: true }
   });
   if (!payment) return res.status(200).json({ ok: true, received: true, matched: false });
+  const expectedAmount = Math.round(Number(payment.amount) * 100);
+  if (Number(body.data.amount) !== expectedAmount || body.data.currency !== 'NGN' || payment.currency !== 'NGN') {
+    return errorResponse(res, 400, 'Webhook payment amount or currency does not match.');
+  }
+  if (body.event === 'charge.success' && body.data.status !== 'success') {
+    return errorResponse(res, 400, 'Webhook transaction was not successful.');
+  }
+  if (body.event === 'charge.failed' && body.data.status !== 'failed') {
+    return errorResponse(res, 400, 'Webhook transaction status does not match its event.');
+  }
   const paymentStatus = body.event === 'charge.success' ? 'Paid' : 'Failed';
-  if (payment.status === paymentStatus) return res.status(200).json({ ok: true, duplicate: true });
-  const nextOrderStatus = body.event === 'charge.success' ? 'Paid' : 'Failed';
-  const history = Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : [];
-  await prisma.$transaction([
-    prisma.payment.update({ where: { id: payment.id }, data: { status: paymentStatus, payload: body } }),
-    prisma.order.update({
-      where: { id: payment.orderId },
+  if (payment.status === 'Paid' || (payment.status === 'Failed' && paymentStatus === 'Failed')) return res.status(200).json({ ok: true, duplicate: true });
+  await prisma.$transaction(async (tx) => {
+    const changed = await tx.payment.updateMany({
+      where: { id: payment.id, ...(paymentStatus === 'Paid' ? { status: { not: 'Paid' } } : { status: 'Pending' }) },
+      data: { status: paymentStatus, payload: { reference: payment.reference, status: body.data.status, amount: body.data.amount, currency: body.data.currency } }
+    });
+    if (!changed.count) return;
+    const history = Array.isArray(payment.order.statusHistory) ? payment.order.statusHistory : [];
+    await tx.order.updateMany({
+      where: { id: payment.orderId, paymentStatus: { not: 'Paid' } },
       data: {
         paymentStatus,
-        statusHistory: [...history, { status: nextOrderStatus, timestamp: new Date().toISOString(), message: `Payment ${paymentStatus.toLowerCase()} confirmed by Paystack webhook.` }]
+        statusHistory: [...history, { status: paymentStatus, timestamp: new Date().toISOString(), message: `Payment ${paymentStatus.toLowerCase()} confirmed by Paystack webhook.` }]
       }
-    })
-  ]);
+    });
+  });
   return res.status(200).json({ ok: true, received: true });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.get('/api/orders/:id', async (req, res, next) => {

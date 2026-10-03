@@ -11,7 +11,7 @@ const DB_KEYS = {
   CURRENT_USER: 'cjgifts_current_user',
   ORDERS: 'cjgifts_orders',
   WISHLIST: 'cjgifts_wishlist',
-  SEEDED: 'cjgifts_seeded_v3'
+  SEEDED: 'cjgifts_seeded_v4'
 };
 
 const CATEGORIES = [
@@ -25,7 +25,7 @@ function img(seed, w = 700, h = 700) {
 const SEED_PRODUCTS = [
   {
     id: 'p1', sku: 'CJG-GD-001', name: 'Luxury Watch Gift Set', category: 'gift-ideas',
-    price: 252687, salePrice: 199487, stock: 24, featured: true, specialOffer: true, published: true,
+    price: 294485, salePrice: 232485, stock: 24, featured: true, specialOffer: true, published: true,
     shortDescription: 'An elegant timepiece presented in a premium gift box.',
     description: 'This luxury watch gift set pairs a refined stainless-steel timepiece with a leather strap, presented in a navy-and-gold keepsake box. A timeless gift for birthdays, anniversaries, or graduations — thoughtfully packaged and ready to give.',
     images: [img('watch1'), img('watch2'), img('watch3')],
@@ -36,7 +36,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p2', sku: 'CJG-GD-002', name: 'Scented Candle Collection', category: 'gift-ideas',
-    price: 71820, salePrice: null, stock: 60, featured: true, specialOffer: false, published: true,
+    price: 83700, salePrice: null, stock: 60, featured: true, specialOffer: false, published: true,
     shortDescription: 'A set of three hand-poured candles in warm seasonal scents.',
     description: 'Three hand-poured soy candles — Amber Oak, Vanilla Bourbon, and Spiced Fig — housed in matte gold tins. Burns cleanly for up to 45 hours each, making this a cozy, thoughtful gift for any occasion.',
     images: [img('candle1'), img('candle2')],
@@ -44,7 +44,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p3', sku: 'CJG-GD-003', name: 'Personalized Photo Frame', category: 'gift-ideas',
-    price: 53187, salePrice: 39887, stock: 40, featured: false, specialOffer: true, published: true,
+    price: 61985, salePrice: 46485, stock: 40, featured: false, specialOffer: true, published: true,
     shortDescription: 'Engraved wooden frame that turns a favorite photo into a keepsake.',
     description: 'A solid oak photo frame with an engraved gold nameplate, designed to hold a 5x7 photo. Each order can be custom engraved with a name or short message — perfect for weddings, new babies, or milestone gifts.',
     images: [img('frame1'), img('frame2')],
@@ -53,7 +53,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p4', sku: 'CJG-GD-004', name: 'Gourmet Chocolate Hamper', category: 'gift-ideas',
-    price: 85785, salePrice: null, stock: 35, featured: true, specialOffer: false, published: true,
+    price: 99975, salePrice: null, stock: 35, featured: true, specialOffer: false, published: true,
     shortDescription: 'A curated hamper of Belgian chocolates and artisan treats.',
     description: 'A generously packed hamper featuring Belgian truffles, dark chocolate bark, honey-roasted nuts, and shortbread biscuits, wrapped in a navy ribbon gift box. Ready to ship directly to the recipient with a personalized card.',
     images: [img('choc1'), img('choc2')],
@@ -61,7 +61,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p5', sku: 'CJG-GD-005', name: 'Leather Journal & Pen Set', category: 'gift-ideas',
-    price: 62510, salePrice: 51870, stock: 50, featured: false, specialOffer: true, published: true,
+    price: 72850, salePrice: 60450, stock: 50, featured: false, specialOffer: true, published: true,
     shortDescription: 'A refillable leather journal paired with a brass fountain pen.',
     description: 'Genuine leather refillable journal with 200 lined pages, paired with a brass fountain pen in a matching gift sleeve. A distinguished gift for writers, students, and professionals alike.',
     images: [img('journal1'), img('journal2')],
@@ -71,7 +71,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p6', sku: 'CJG-GD-006', name: 'Gold-Plated Jewelry Box', category: 'gift-ideas',
-    price: 109060, salePrice: null, stock: 18, featured: false, specialOffer: false, published: true,
+    price: 127100, salePrice: null, stock: 18, featured: false, specialOffer: false, published: true,
     shortDescription: 'A velvet-lined jewelry box with gold-plated hardware.',
     description: 'A velvet-lined jewelry box featuring gold-plated hinges and a mirrored interior, with two tiers for rings, earrings, and necklaces. An elegant gift that becomes a lasting keepsake on any vanity.',
     images: [img('jewel1'), img('jewel2')],
@@ -79,7 +79,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p7', sku: 'CJG-PA-001', name: 'Wireless Bluetooth Earbuds', category: 'products-accessories',
-    price: 106387, salePrice: 79787, stock: 75, featured: true, specialOffer: true, published: true,
+    price: 123985, salePrice: 92985, stock: 75, featured: true, specialOffer: true, published: true,
     shortDescription: 'True wireless earbuds with active noise cancellation.',
     description: 'Premium true-wireless earbuds featuring active noise cancellation, 28-hour total battery life with the charging case, and a secure, comfortable fit. Includes a USB-C charging cable and three ear-tip sizes.',
     images: [img('earbuds1'), img('earbuds2'), img('earbuds3')],
@@ -89,7 +89,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p8', sku: 'CJG-PA-002', name: 'Classic Leather Wallet', category: 'products-accessories',
-    price: 59850, salePrice: null, stock: 90, featured: false, specialOffer: false, published: true,
+    price: 69750, salePrice: null, stock: 90, featured: false, specialOffer: false, published: true,
     shortDescription: 'Slim bifold wallet crafted from full-grain leather.',
     description: 'A slim bifold wallet made from full-grain leather with six card slots, a bill compartment, and a subtle gold foil emboss. Ages beautifully with use.',
     images: [img('wallet1'), img('wallet2')],
@@ -99,7 +99,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p9', sku: 'CJG-PA-003', name: 'Classic Aviator Sunglasses', category: 'products-accessories',
-    price: 77140, salePrice: 55860, stock: 55, featured: true, specialOffer: true, published: true,
+    price: 89900, salePrice: 65100, stock: 55, featured: true, specialOffer: true, published: true,
     shortDescription: 'Polarized aviator sunglasses with gold-tone frames.',
     description: 'Polarized UV400 lenses set in lightweight gold-tone metal frames. A timeless silhouette that suits every face shape, delivered in a protective hard case.',
     images: [img('sunglass1'), img('sunglass2')],
@@ -107,7 +107,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p10', sku: 'CJG-PA-004', name: 'Smart Fitness Band', category: 'products-accessories',
-    price: 93087, salePrice: null, stock: 4, featured: false, specialOffer: false, published: true,
+    price: 108485, salePrice: null, stock: 4, featured: false, specialOffer: false, published: true,
     shortDescription: 'Track steps, heart rate, and sleep with a slim smart band.',
     description: 'A slim, lightweight fitness tracker with heart-rate monitoring, sleep tracking, and a 10-day battery life. Water-resistant and compatible with iOS and Android.',
     images: [img('fitband1'), img('fitband2')],
@@ -117,7 +117,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p11', sku: 'CJG-PA-005', name: 'Premium Canvas Backpack', category: 'products-accessories',
-    price: 126350, salePrice: 98420, stock: 30, featured: true, specialOffer: true, published: true,
+    price: 147250, salePrice: 114700, stock: 30, featured: true, specialOffer: true, published: true,
     shortDescription: 'Water-resistant canvas backpack with a padded laptop sleeve.',
     description: 'A water-resistant waxed-canvas backpack with leather trims, a padded 15" laptop sleeve, and a spacious main compartment. Built for daily commutes and weekend trips alike.',
     images: [img('backpack1'), img('backpack2')],
@@ -125,7 +125,7 @@ const SEED_PRODUCTS = [
   },
   {
     id: 'p12', sku: 'CJG-PA-006', name: 'Stainless Steel Water Bottle', category: 'products-accessories',
-    price: 37240, salePrice: null, stock: 0, featured: false, specialOffer: false, published: true,
+    price: 43400, salePrice: null, stock: 0, featured: false, specialOffer: false, published: true,
     shortDescription: 'Double-wall insulated bottle that keeps drinks cold for 24 hours.',
     description: 'A double-wall vacuum-insulated stainless-steel bottle that keeps drinks cold for 24 hours or hot for 12. Leakproof lid and a brushed matte finish.',
     images: [img('bottle1'), img('bottle2')],

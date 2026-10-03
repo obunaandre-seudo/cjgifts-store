@@ -49,18 +49,20 @@ After configuring `DATABASE_URL`, apply the schema and create the sample catalog
 ```sh
 npm run db:generate
 npm run db:push
+npm run db:convert-naira
 npm run db:seed
 ```
+
+The one-time conversion changes existing USD product prices and sale prices to naira at ₦1,550 per USD. It marks converted records as NGN, so rerunning it will not convert them again. New products created in the admin are saved in naira.
 
 ## Paystack configuration
 
 Set the following variables in production:
 
 - `PAYSTACK_SECRET_KEY`
-- `PAYSTACK_PUBLIC_KEY`
-- `USE_TEST_PAYSTACK=true` in local testing, then switch to `false` only after confirming a production-ready account configuration.
+- `PUBLIC_APP_URL` (the site origin; use the HTTPS production URL)
 
-The app is structured to support test-mode checkout without charging real cards. Paystack webhooks must be configured in the Paystack dashboard to point at:
+Keep `PAYSTACK_SECRET_KEY` only in server environment variables. Use a test key locally; production accepts only a live secret key. Payment initialization and verification fail closed if credentials or the public HTTPS site URL are missing. Orders stay pending until Paystack confirms the exact NGN amount and currency. Configure the Paystack webhook in the dashboard to point at:
 
 `https://your-domain.com/api/payments/webhook`
 

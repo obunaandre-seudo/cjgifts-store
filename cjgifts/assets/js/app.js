@@ -488,18 +488,7 @@ async function submitOrder(items, subtotal, discount, shipping) {
     const payment = await paymentResponse.json();
     if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Order saved, but payment could not be started.');
 
-    if (payment.mock || payment.alreadyPaid) {
-      if (payment.mock) {
-        const verifyResponse = await fetch('/api/payments/verify', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken, reference: payment.reference })
-        });
-        const verified = await verifyResponse.json();
-        if (!verifyResponse.ok || !verified.ok) throw new Error(verified.message || 'Order saved; payment is still pending.');
-        order = verified.order;
-        Orders.create(order);
-      }
+    if (payment.alreadyPaid) {
       window.location.href = callbackUrl;
       return;
     }

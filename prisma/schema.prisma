@@ -57,6 +57,7 @@ model Product {
   description    String?
   price          Decimal     @db.Decimal(10, 2)
   salePrice      Decimal?    @db.Decimal(10, 2)
+  priceCurrency  String      @default("USD")
   stock          Int         @default(0)
   category       String
   featured       Boolean     @default(false)
@@ -82,7 +83,7 @@ model Order {
   tax              Decimal     @db.Decimal(10, 2)
   currency         String      @default("NGN")
   paymentStatus    String      @default("Pending")
-  fulfillmentStatus String     @default("Processing")
+  fulfillmentStatus String     @default("Pending")
   deliveryCountry  String
   deliveryCity     String
   deliveryStreet   String

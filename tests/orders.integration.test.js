@@ -9,7 +9,7 @@ const [{ default: app }, { prisma }] = await Promise.all([
   import('../src/lib/prisma.js')
 ]);
 
-test('checkout order is stored and visible with its purchased items to admin', async () => {
+test('checkout stays unpaid when Paystack is unavailable and cannot be fulfilled', async () => {
   const original = {
     transaction: prisma.$transaction,
     productFindMany: prisma.product.findMany,
@@ -103,6 +103,8 @@ test('checkout order is stored and visible with its purchased items to admin', a
     assert.equal(orderResponse.status, 201);
     assert.equal(created.order.items[0].name, 'Test Gift Box');
     assert.equal(created.order.items[0].quantity, 2);
+    assert.equal(created.order.currency, 'NGN');
+    assert.equal(created.order.paymentStatus, 'Pending');
     assert.equal(stock, 4);
     assert.equal(savedCustomerInput.create.phone, customer.phone);
     assert.deepEqual(savedCustomerInput.create.address, {
@@ -116,14 +118,32 @@ test('checkout order is stored and visible with its purchased items to admin', a
       body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken })
     });
     const payment = await paymentResponse.json();
-    assert.equal(paymentResponse.status, 200);
-    assert.equal(payment.mock, true);
+    assert.equal(paymentResponse.status, 503);
+    assert.equal(payment.ok, false);
+
+    savedPayment = {
+      id: 'payment-checkout-test', orderId: created.order.id, reference: 'pending-reference',
+      amount: created.order.total, currency: 'NGN', status: 'Pending', order: savedOrder
+    };
 
     const verifyResponse = await fetch(`${baseUrl}/api/payments/verify`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken, reference: payment.reference })
+      body: JSON.stringify({ orderId: created.order.id, accessToken: created.order.accessToken, reference: savedPayment.reference })
     });
-    assert.equal(verifyResponse.status, 200);
+    assert.equal(verifyResponse.status, 503);
+
+    const webhookResponse = await fetch(`${baseUrl}/api/payments/webhook`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'charge.success', data: { reference: savedPayment.reference, status: 'success' } })
+    });
+    assert.equal(webhookResponse.status, 401);
+
+    const unpaidStatusResponse = await fetch(`${baseUrl}/api/admin/orders/${created.order.id}/status`, {
+      method: 'PUT',
+      headers: { Cookie: 'cjgifts_admin_session=test-session', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Shipped' })
+    });
+    assert.equal(unpaidStatusResponse.status, 409);
 
     const adminResponse = await fetch(`${baseUrl}/api/admin/orders`, {
       headers: { Cookie: 'cjgifts_admin_session=test-session' }
@@ -133,7 +153,7 @@ test('checkout order is stored and visible with its purchased items to admin', a
     assert.equal(admin.orders.length, 1);
     assert.equal(admin.orders[0].items[0].name, 'Test Gift Box');
     assert.equal(admin.orders[0].items[0].quantity, 2);
-    assert.equal(admin.orders[0].paymentStatus, 'Paid');
+    assert.equal(admin.orders[0].paymentStatus, 'Pending');
 
     const customersResponse = await fetch(`${baseUrl}/api/admin/customers`, {
       headers: { Cookie: 'cjgifts_admin_session=test-session' }
