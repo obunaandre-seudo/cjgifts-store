@@ -18,7 +18,7 @@ function adminSidebarHTML(active) {
   const link = (href, label, key, icon) =>
     `<a href="${href}" class="${active===key?'active':''}">${icon} ${label}</a>`;
   return `
-    <div class="logo"><span class="mark">CJ</span>Admin</div>
+    <div class="logo"><img class="logo-image" src="../assets/images/cj-gifts-logo.jpg" alt="CJ Gifts logo">Admin</div>
     <nav>
       ${link('dashboard.html','Dashboard','dashboard','📊')}
       ${link('products.html','Products','products','🛍️')}
