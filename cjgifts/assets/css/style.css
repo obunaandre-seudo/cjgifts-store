@@ -151,6 +151,12 @@ input,select,textarea{font-family:inherit;}
   animation:glowPulse 3s ease-in-out infinite;
 }
 .logo span.accent{color:var(--gold);}
+.logo .logo-image{
+  width:54px;height:40px;object-fit:contain;border-radius:5px;
+  box-shadow:0 0 18px rgba(225,29,72,.35);
+  animation:glowPulse 3s ease-in-out infinite,heartbeat 1.8s ease-in-out infinite;
+}
+.logo:hover .logo-image{animation-duration:3s,.7s;}
 
 .main-nav{display:flex;gap:28px;align-items:center;}
 .main-nav a{
@@ -1050,6 +1056,7 @@ body{background:#fff;}
   .main-header .container.top-row{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding-left:16px;padding-right:16px;}
   .main-header .logo{gap:7px;font-size:21px;}
   .main-header .logo .mark{width:34px;height:34px;font-size:16px;}
+  .main-header .logo .logo-image{width:46px;height:34px;}
   .header-actions{gap:8px;}
   .main-header .icon-btn{width:36px;height:36px;}
   .hamburger{width:24px;}

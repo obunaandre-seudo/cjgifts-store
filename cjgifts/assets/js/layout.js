@@ -13,7 +13,7 @@ function siteHeaderHTML(active) {
   return `
   <header class="main-header">
     <div class="container top-row">
-      <a href="index.html" class="logo"><span class="mark">CJ</span>CJ <span class="accent">Gifts</span></a>
+      <a href="index.html" class="logo"><img class="logo-image" src="assets/images/cj-gifts-logo.jpg" alt="CJ Gifts logo"><span class="accent">Gifts</span></a>
       <form class="search-box" onsubmit="event.preventDefault(); if(this.q.value.trim()) window.location.href='shop.html?search='+encodeURIComponent(this.q.value);">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input name="q" type="text" placeholder="Search gifts, watches, candles...">
@@ -65,7 +65,7 @@ function siteFooterHTML() {
   <div class="footer-top">
     <div class="container footer-grid">
       <div class="footer-brand">
-        <a href="index.html" class="logo" style="margin-bottom:14px;"><span class="mark">CJ</span>CJ <span class="accent">Gifts</span></a>
+        <a href="index.html" class="logo" style="margin-bottom:14px;"><img class="logo-image" src="assets/images/cj-gifts-logo.jpg" alt="CJ Gifts logo"><span class="accent">Gifts</span></a>
         <p>A modern shopping destination for thoughtful gifts for every occasion — curated with care, delivered with pride.</p>
         <div class="social-row">
           <a href="#" title="Facebook">f</a>
