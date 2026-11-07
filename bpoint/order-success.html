@@ -6,7 +6,7 @@
 <title>Payment Status — BPoint Gift Store</title>
 <meta name="theme-color" content="#1b0b33">
 <link rel="icon" type="image/svg+xml" href="assets/images/bpoint-logo.svg">
-<link rel="stylesheet" href="assets/css/style.css?v=3">
+<link rel="stylesheet" href="assets/css/style.css?v=8">
 </head>
 <body>
 <div id="site-header"></div>
@@ -17,8 +17,9 @@
       display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:40px;color:var(--navy);
       box-shadow:0 0 40px rgba(212,175,55,.6);animation:glowPulse 2s infinite;">✓</div>
     <h1>Checking Your Payment</h1>
-    <p>Please wait while we confirm your payment with Paystack.</p>
+    <p>Please wait while we confirm your payment.</p>
     <div class="admin-panel" style="text-align:left;max-width:340px;margin:24px auto;">
+      <div class="summary-row"><span>Order number</span><strong id="successOrderNum"></strong></div>
       <div class="summary-row total"><span>Order Total</span><span id="successTotal"></span></div>
     </div>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
@@ -31,8 +32,8 @@
 <div id="site-footer"></div>
 
 <script src="assets/js/data.js?v=3"></script>
-<script src="assets/js/layout.js?v=3"></script>
-<script src="assets/js/app.js?v=3"></script>
+<script src="assets/js/layout.js?v=4"></script>
+<script src="assets/js/app.js?v=4"></script>
 <script>
   renderLayout('shop');
   initOrderSuccessPage();

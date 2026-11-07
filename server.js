@@ -7,7 +7,7 @@ import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import { readStore, writeStore, buildOrderNumber } from './src/lib/store.js';
 import { getDatabaseConfigurationError, prisma } from './src/lib/prisma.js';
-import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference } from './src/lib/validation.js';
+import { orderSchema, paymentSettingsSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference } from './src/lib/validation.js';
 
 const app = express();
 
@@ -22,6 +22,7 @@ const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL || (process.env.VERCEL_URL ? `
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
 const ADMIN_SESSION_COOKIE = 'bpoint_admin_session';
 const CUSTOMER_SESSION_COOKIE = 'bpoint_customer_session';
+const PAYMENT_SETTINGS_ID = 'default';
 
 app.use(cors({
   origin(origin, callback) {
@@ -126,6 +127,8 @@ function getPaymentCallbackUrl(order) {
 }
 
 function serializeOrder(order) {
+  const recipientName = order.recipientName || order.customer?.name || '';
+  const recipientPhone = order.recipientPhone || order.customer?.phone || '';
   const delivery = {
     country: order.deliveryCountry,
     city: order.deliveryCity,
@@ -139,8 +142,8 @@ function serializeOrder(order) {
     id: order.id,
     orderNumber: order.orderNumber,
     accessToken: order.accessToken,
-    customer: { name: order.customer.name, email: order.customer.email, phone: order.customer.phone || '' },
-    recipient: { name: order.customer.name, phone: order.customer.phone || '' },
+    customer: { name: recipientName, email: order.customer?.email || '', phone: recipientPhone },
+    recipient: { name: recipientName, phone: recipientPhone },
     delivery,
     shippingAddress: { address: delivery.street, city: delivery.city, state: delivery.region, country: delivery.country, postal: delivery.postalCode },
     items: (order.items || []).map((item) => ({
@@ -161,11 +164,26 @@ function serializeOrder(order) {
     currency: order.currency,
     paymentStatus: order.paymentStatus,
     paymentMode: order.paymentMode || null,
+    paymentInstructions: order.payments?.find((payment) => payment.provider === 'bank_transfer')?.payload || null,
     fulfillmentStatus: order.fulfillmentStatus,
     status: order.fulfillmentStatus,
     statusHistory: order.statusHistory || [],
     createdAt: order.createdAt.getTime(),
     updatedAt: order.updatedAt.getTime()
+  };
+}
+
+function emptyPaymentSettings() {
+  return { id: PAYMENT_SETTINGS_ID, bankTransferEnabled: false, bankName: '', accountName: '', accountNumber: '' };
+}
+
+function publicPaymentSettings(settings) {
+  const enabled = Boolean(settings?.bankTransferEnabled);
+  return {
+    bankTransferEnabled: enabled,
+    bankName: enabled ? settings.bankName : '',
+    accountName: enabled ? settings.accountName : '',
+    accountNumber: enabled ? settings.accountNumber : ''
   };
 }
 
@@ -500,14 +518,88 @@ app.delete('/api/admin/products/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
+app.get('/api/payment-settings', async (req, res, next) => {
+  try {
+    const settings = await prisma.paymentSettings.findUnique({ where: { id: PAYMENT_SETTINGS_ID } });
+    return res.json({ ok: true, settings: publicPaymentSettings(settings) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/admin/payment-settings', requireAdmin, async (req, res, next) => {
+  try {
+    const settings = await prisma.paymentSettings.findUnique({ where: { id: PAYMENT_SETTINGS_ID } });
+    return res.json({ ok: true, settings: settings || emptyPaymentSettings() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.put('/api/admin/payment-settings', requireAdmin, async (req, res, next) => {
+  const parsed = paymentSettingsSchema.safeParse(req.body);
+  if (!parsed.success) return errorResponse(res, 400, 'Bank transfer settings are invalid.', parsed.error.flatten());
+  try {
+    const settings = await prisma.paymentSettings.upsert({
+      where: { id: PAYMENT_SETTINGS_ID },
+      create: { id: PAYMENT_SETTINGS_ID, ...parsed.data },
+      update: parsed.data
+    });
+    return res.json({ ok: true, settings });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get('/api/admin/orders', requireAdmin, async (req, res, next) => {
   try {
     const orders = await prisma.order.findMany({
-      include: { customer: true, items: true },
+      include: { customer: true, items: true, payments: true },
       orderBy: { createdAt: 'desc' }
     });
     return res.json({ ok: true, orders: orders.map(serializeOrder) });
   } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/admin/orders/:id/confirm-transfer', requireAdmin, async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { customer: true, items: true, payments: true }
+    });
+    if (!order) return errorResponse(res, 404, 'Order not found.');
+    if (order.paymentStatus === 'Paid') return errorResponse(res, 409, 'Payment has already been confirmed.');
+    const transfer = order.payments.find((payment) => payment.provider === 'bank_transfer');
+    if (!transfer || transfer.status !== 'Pending') return errorResponse(res, 409, 'This order has no pending bank transfer to confirm.');
+
+    await prisma.$transaction(async (tx) => {
+      const changed = await tx.payment.updateMany({
+        where: { id: transfer.id, provider: 'bank_transfer', status: 'Pending' },
+        data: { status: 'Paid' }
+      });
+      if (changed.count !== 1) throw new OrderRequestError(409, 'Payment has already been confirmed.');
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'Paid',
+          paymentMode: 'bank_transfer',
+          statusHistory: [...(Array.isArray(order.statusHistory) ? order.statusHistory : []), {
+            status: 'Paid',
+            timestamp: new Date().toISOString(),
+            message: `Bank transfer confirmed by admin ${req.admin.email}.`
+          }]
+        }
+      });
+    });
+    const updated = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: { customer: true, items: true, payments: true }
+    });
+    return res.json({ ok: true, order: serializeOrder(updated) });
+  } catch (error) {
+    if (error instanceof OrderRequestError) return errorResponse(res, error.status, error.message);
     return next(error);
   }
 });
@@ -564,7 +656,8 @@ app.post('/api/orders', async (req, res, next) => {
   const payload = parsed.data;
   try {
     const customerSession = await getCustomerSession(req);
-    if (customerSession && customerSession.customer.email !== payload.customer.email.trim().toLowerCase()) {
+    const submittedEmail = payload.customer?.email?.trim().toLowerCase() || null;
+    if (customerSession && submittedEmail && customerSession.customer.email !== submittedEmail) {
       return errorResponse(res, 403, 'Use the email address for your signed-in customer account.');
     }
     const order = await prisma.$transaction(async (tx) => {
@@ -579,10 +672,17 @@ app.post('/api/orders', async (req, res, next) => {
       const validation = validateCart(payload.items.map((item) => ({ productId: item.productId, quantity: item.quantity })), catalog);
       if (!validation.ok) throw new OrderRequestError(400, 'Cart validation failed.', validation.errors);
 
+      const paymentSettings = payload.paymentMethod === 'bank_transfer'
+        ? await tx.paymentSettings.findUnique({ where: { id: PAYMENT_SETTINGS_ID } })
+        : null;
+      if (payload.paymentMethod === 'bank_transfer' && !paymentSettings?.bankTransferEnabled) {
+        throw new OrderRequestError(409, 'Bank transfer is not currently available.');
+      }
+
       const shipping = getShippingFee(payload.delivery.country, validation.subtotal);
       if (!shipping.eligible) throw new OrderRequestError(400, shipping.message, { country: payload.delivery.country });
       const totals = calculateOrderTotal(validation.items, shipping.shippingFee, 0);
-      const email = payload.customer.email.trim().toLowerCase();
+      const email = submittedEmail || customerSession?.customer.email || null;
       const customerAddress = {
         line1: payload.delivery.street,
         city: payload.delivery.city,
@@ -590,20 +690,22 @@ app.post('/api/orders', async (req, res, next) => {
         country: payload.delivery.country,
         postal: payload.delivery.postalCode || ''
       };
-      const customer = await tx.customer.upsert({
-        where: { email },
-        create: {
-          name: payload.customer.name,
-          email,
-          phone: payload.customer.phone || null,
-          address: customerAddress
-        },
-        update: {
-          name: payload.customer.name,
-          ...(payload.customer.phone ? { phone: payload.customer.phone } : {}),
-          address: customerAddress
-        }
-      });
+      const customer = customerSession?.customer || (email
+        ? await tx.customer.upsert({
+          where: { email },
+          create: {
+            name: payload.recipient.name,
+            email,
+            phone: payload.recipient.phone,
+            address: customerAddress
+          },
+          update: {
+            name: payload.recipient.name,
+            phone: payload.recipient.phone,
+            address: customerAddress
+          }
+        })
+        : null);
 
       for (const item of validation.items) {
         const updated = await tx.product.updateMany({
@@ -614,22 +716,25 @@ app.post('/api/orders', async (req, res, next) => {
       }
 
       const productsById = new Map(products.map((product) => [product.id, product]));
-      return tx.order.create({
+      const createdOrder = await tx.order.create({
         data: {
           orderNumber: buildOrderNumber(),
           accessToken: randomBytes(32).toString('base64url'),
-          customerId: customer.id,
+          ...(customer ? { customerId: customer.id } : {}),
           subtotal: totals.subtotal,
           shippingFee: totals.shippingFee,
           tax: totals.tax,
           total: totals.total,
           currency: 'NGN',
           paymentStatus: 'Pending',
+          paymentMode: payload.paymentMethod === 'bank_transfer' ? 'bank_transfer' : null,
           fulfillmentStatus: 'Pending',
           deliveryCountry: payload.delivery.country,
           deliveryCity: payload.delivery.city,
           deliveryStreet: payload.delivery.street,
           deliveryRegion: payload.delivery.region || null,
+          recipientName: payload.recipient.name,
+          recipientPhone: payload.recipient.phone,
           notes: [payload.delivery.apartment, payload.delivery.instructions].filter(Boolean).join(' — ') || null,
           statusHistory: [{ status: 'Pending', timestamp: new Date().toISOString(), message: 'Order created and awaiting payment confirmation.' }],
           items: {
@@ -644,6 +749,25 @@ app.post('/api/orders', async (req, res, next) => {
         },
         include: { customer: true, items: true }
       });
+      if (payload.paymentMethod === 'bank_transfer') {
+        await tx.payment.create({
+          data: {
+            orderId: createdOrder.id,
+            reference: `bank_${createdOrder.id}_${randomBytes(8).toString('hex')}`,
+            amount: totals.total,
+            currency: 'NGN',
+            provider: 'bank_transfer',
+            mode: 'manual',
+            status: 'Pending',
+            payload: {
+              bankName: paymentSettings.bankName,
+              accountName: paymentSettings.accountName,
+              accountNumber: paymentSettings.accountNumber
+            }
+          }
+        });
+      }
+      return createdOrder;
     });
     return res.status(201).json({ ok: true, order: serializeOrder(order) });
   } catch (error) {
@@ -660,9 +784,10 @@ app.post('/api/payments/initiate', async (req, res, next) => {
     }
     const paystack = getPaystackCredentials();
     if (!paystack) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true, payments: true } });
     if (!order) return errorResponse(res, 404, 'Order not found.');
     if (!accessToken || order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized order payment.');
+    if ((order.payments || []).some((payment) => payment.provider === 'bank_transfer')) return errorResponse(res, 409, 'This order is awaiting bank transfer confirmation.');
     if (order.paymentStatus === 'Paid') return res.json({ ok: true, alreadyPaid: true });
     const callbackUrl = getPaymentCallbackUrl(order);
     if (!callbackUrl) return errorResponse(res, 503, 'Online payment is temporarily unavailable.');
@@ -719,7 +844,7 @@ app.post('/api/payments/verify', async (req, res, next) => {
     if (!reference || !orderId) return errorResponse(res, 400, 'A payment reference and order are required.');
     const payment = await prisma.payment.findFirst({
       where: { reference, orderId },
-      include: { order: { include: { customer: true, items: true } } }
+      include: { order: { include: { customer: true, items: true, payments: true } } }
     });
     if (!payment) return errorResponse(res, 404, 'Payment or order not found.');
     if (!accessToken || payment.order.accessToken !== accessToken) return errorResponse(res, 403, 'Unauthorized payment verification.');
@@ -826,7 +951,7 @@ app.get('/api/orders/:id', async (req, res, next) => {
   try {
     const order = await prisma.order.findFirst({
       where: { OR: [{ id: req.params.id }, { orderNumber: req.params.id }] },
-      include: { customer: true, items: true }
+      include: { customer: true, items: true, payments: true }
     });
     if (!order) return errorResponse(res, 404, 'Order not found.');
     if (!req.query.token || order.accessToken !== req.query.token) return errorResponse(res, 403, 'Unauthorized order lookup.');

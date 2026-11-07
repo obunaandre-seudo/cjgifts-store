@@ -26,6 +26,7 @@ This project adds a backend layer for the BPoint Gift Store storefront. Customer
 - `GET /api/products` — list catalog
 - `GET /api/products/:id` — product by id
 - `POST /api/orders` — create a validated order
+- `GET /api/payment-settings` — public payment methods and enabled transfer details
 - `POST /api/customer/register` — create a database-backed customer account
 - `POST /api/customer/login` — customer login
 - `GET /api/customer/session` — current customer session
@@ -34,6 +35,8 @@ This project adds a backend layer for the BPoint Gift Store storefront. Customer
 - `GET /api/orders/:id?token=...` — secure customer order lookup
 - `POST /api/admin/login` — admin login
 - `GET /api/admin/orders` — admin order list (requires admin bearer token)
+- `GET /api/admin/payment-settings` and `PUT /api/admin/payment-settings` — manage transfer account details
+- `POST /api/admin/orders/:id/confirm-transfer` — confirm a received bank transfer
 - `POST /api/payments/initiate` — initialize Paystack transaction
 - `POST /api/payments/verify` — verify a transaction reference
 - `POST /api/payments/webhook` — Paystack webhook endpoint
@@ -62,6 +65,12 @@ Do not put secret values in Git, source files, chat, or build output. Add them t
 The application schema is PostgreSQL. Use the direct URL for schema setup and the pooled URL for web requests. Keep both database URLs in Vercel's encrypted Environment Variables; never place them in source files or build logs.
 
 After connecting the repository and setting variables, deploy a Preview first. Verify the HTTPS storefront and `/api/health`; the health endpoint checks database connectivity. Confirm the production domain and Paystack webhook URL before promoting a deployment or accepting live payments.
+
+### Bank transfer checkout
+
+Bank transfers are disabled until an admin enters the receiving bank, account name, and account number under **Admin → Payment Settings** and enables the option. Checkout collects only the recipient's name, phone, and delivery address, and uses bank transfer; it does not ask for an email address. Transfer orders stay pending until an admin verifies receipt and selects **Confirm received** on the Orders page. The account details are snapshotted with each order, so subsequent settings edits do not change instructions already issued to customers.
+
+Before deploying this feature, back up the database or create a Neon branch. After reviewing the change, run `npm run db:push` against the intended database from a trusted environment to create `PaymentSettings` and add recipient snapshots and optional account association to orders. Do not put database credentials in Git, chat, source files, or Vercel build logs.
 
 ### Database setup and safe seed
 

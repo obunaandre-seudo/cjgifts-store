@@ -12,7 +12,7 @@ function siteHeaderHTML(active) {
     : '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.9 13.1A8.5 8.5 0 0 1 10.9 3.1 8.5 8.5 0 1 0 20.9 13.1Z"/></svg>';
   const searchJs = "event.preventDefault(); if(this.q.value.trim()) window.location.href='shop.html?search='+encodeURIComponent(this.q.value);";
   return `
-  <div class="announce">Gift-wrapped with care <span>◆</span> Secure checkout with Paystack</div>
+  <div class="announce">Gift-wrapped with care <span>◆</span> Secure bank transfer checkout</div>
   <header class="main-header">
     <div class="container top-row">
       <a href="index.html" class="logo" aria-label="BPoint Gift Store home"><img class="logo-image" src="assets/images/bpoint-logo.svg" alt="" width="40" height="40">BPoint <span class="accent">Gifts</span></a>

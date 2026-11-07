@@ -22,6 +22,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     customerUpsert: prisma.customer.upsert,
     customerFindMany: prisma.customer.findMany,
     orderCreate: prisma.order.create,
+    orderFindFirst: prisma.order.findFirst,
     orderFindUnique: prisma.order.findUnique,
     orderFindMany: prisma.order.findMany,
     paymentCreate: prisma.payment.create,
@@ -32,6 +33,8 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     orderUpdate: prisma.order.update,
     orderUpdateMany: prisma.order.updateMany,
     adminSessionFindUnique: prisma.adminSession.findUnique,
+    paymentSettingsFindUnique: prisma.paymentSettings.findUnique,
+    paymentSettingsUpsert: prisma.paymentSettings.upsert,
     fetch: global.fetch
   };
 
@@ -41,6 +44,13 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
   let savedOrder = null;
   let savedPayment = null;
   let savedCustomerInput = null;
+  let paymentSettings = {
+    id: 'default',
+    bankTransferEnabled: true,
+    bankName: 'Example Bank',
+    accountName: 'BPoint Gifts',
+    accountNumber: '1234567890'
+  };
   global.fetch = async (input, options = {}) => {
     const url = String(input);
     if (url === 'https://api.paystack.co/transaction/initialize') {
@@ -83,19 +93,23 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
   prisma.order.create = async ({ data }) => {
     savedOrder = {
       id: 'order-checkout-test', orderNumber: data.orderNumber, accessToken: data.accessToken,
-      customer, items: data.items.create, subtotal: data.subtotal, shippingFee: data.shippingFee,
+      customer: data.customerId ? customer : null, items: data.items.create, subtotal: data.subtotal, shippingFee: data.shippingFee,
       tax: data.tax, total: data.total, currency: data.currency, paymentStatus: data.paymentStatus,
       fulfillmentStatus: data.fulfillmentStatus, deliveryCountry: data.deliveryCountry,
       deliveryCity: data.deliveryCity, deliveryStreet: data.deliveryStreet,
-      deliveryRegion: data.deliveryRegion, notes: data.notes, statusHistory: data.statusHistory,
+      deliveryRegion: data.deliveryRegion, recipientName: data.recipientName, recipientPhone: data.recipientPhone,
+      notes: data.notes, statusHistory: data.statusHistory,
+      paymentMode: data.paymentMode, payments: [],
       createdAt: dates, updatedAt: dates
     };
     return savedOrder;
   };
   prisma.order.findMany = async () => savedOrder ? [savedOrder] : [];
+  prisma.order.findFirst = async () => savedOrder;
   prisma.order.findUnique = async () => savedOrder;
   prisma.payment.create = async ({ data }) => {
     savedPayment = { id: 'payment-checkout-test', ...data, status: 'Pending' };
+    if (savedOrder) savedOrder.payments.push(savedPayment);
     return savedPayment;
   };
   prisma.payment.findFirst = async () => savedPayment ? { ...savedPayment, order: savedOrder } : null;
@@ -116,12 +130,17 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     savedOrder.updatedAt = dates;
     return { count: 1 };
   };
+  prisma.paymentSettings.findUnique = async () => paymentSettings;
+  prisma.paymentSettings.upsert = async ({ create, update }) => {
+    paymentSettings = { ...paymentSettings, ...(create || {}), ...(update || {}) };
+    return paymentSettings;
+  };
   prisma.adminSession.findUnique = async () => ({
     expiresAt: new Date(Date.now() + 60_000),
     admin: { role: 'admin', email: 'admin@example.test' }
   });
   prisma.$transaction = async operation => typeof operation === 'function'
-    ? operation({ product: prisma.product, customer: prisma.customer, order: prisma.order, payment: prisma.payment })
+    ? operation({ product: prisma.product, customer: prisma.customer, order: prisma.order, payment: prisma.payment, paymentSettings: prisma.paymentSettings })
     : Promise.all(operation);
 
   const listener = app.listen(0);
@@ -151,6 +170,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
         recipient: { name: customer.name, phone: customer.phone },
         delivery: { country: 'United States', city: 'Test City', region: 'CA', street: '1 Test Street' },
         items: [{ productId: 'gift-product-test', name: 'Test Gift Box', quantity: 2, unitPrice: 20 }],
+        paymentMethod: 'paystack',
         currency: 'USD'
       })
     });
@@ -232,6 +252,61 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     assert.equal(customers.customers[0].phone, customer.phone);
     assert.equal(customers.customers[0].address.city, 'Test City');
     assert.equal(customers.customers[0].orderCount, 1);
+
+    const bankSettingsResponse = await fetch(`${baseUrl}/api/admin/payment-settings`, {
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
+    });
+    const bankSettings = await bankSettingsResponse.json();
+    assert.equal(bankSettingsResponse.status, 200);
+    assert.equal(bankSettings.settings.accountNumber, '1234567890');
+
+    const bankOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient: { name: 'Gift Recipient', phone: '5557654321' },
+        delivery: { country: 'Nigeria', city: 'Lagos', street: '2 Transfer Road' },
+        items: [{ productId: 'gift-product-test', name: 'Test Gift Box', quantity: 1, unitPrice: 20 }],
+        paymentMethod: 'bank_transfer',
+        currency: 'NGN'
+      })
+    });
+    const bankOrderResult = await bankOrderResponse.json();
+    assert.equal(bankOrderResponse.status, 201);
+    assert.equal(bankOrderResult.order.customer.name, 'Gift Recipient');
+    assert.equal(bankOrderResult.order.customer.email, '');
+    assert.equal(bankOrderResult.order.customer.phone, '5557654321');
+    assert.equal(savedOrder.customer, null);
+    assert.equal(savedPayment.provider, 'bank_transfer');
+    assert.deepEqual(savedPayment.payload, {
+      bankName: 'Example Bank',
+      accountName: 'BPoint Gifts',
+      accountNumber: '1234567890'
+    });
+
+    const transferInstructionsResponse = await fetch(`${baseUrl}/api/orders/${bankOrderResult.order.id}?token=${bankOrderResult.order.accessToken}`);
+    const transferInstructions = await transferInstructionsResponse.json();
+    assert.equal(transferInstructions.order.paymentInstructions.accountNumber, '1234567890');
+
+    const blockedPaystackResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: bankOrderResult.order.id, accessToken: bankOrderResult.order.accessToken })
+    });
+    assert.equal(blockedPaystackResponse.status, 409);
+
+    const confirmationResponse = await fetch(`${baseUrl}/api/admin/orders/${bankOrderResult.order.id}/confirm-transfer`, {
+      method: 'POST',
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
+    });
+    const confirmation = await confirmationResponse.json();
+    assert.equal(confirmationResponse.status, 200);
+    assert.equal(confirmation.order.paymentStatus, 'Paid');
+    assert.equal(savedPayment.status, 'Paid');
+
+    const duplicateConfirmationResponse = await fetch(`${baseUrl}/api/admin/orders/${bankOrderResult.order.id}/confirm-transfer`, {
+      method: 'POST',
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
+    });
+    assert.equal(duplicateConfirmationResponse.status, 409);
   } finally {
     await new Promise(resolve => listener.close(resolve));
     prisma.$transaction = original.transaction;
@@ -240,6 +315,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     prisma.customer.upsert = original.customerUpsert;
     prisma.customer.findMany = original.customerFindMany;
     prisma.order.create = original.orderCreate;
+    prisma.order.findFirst = original.orderFindFirst;
     prisma.order.findUnique = original.orderFindUnique;
     prisma.order.findMany = original.orderFindMany;
     prisma.payment.create = original.paymentCreate;
@@ -250,6 +326,8 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     prisma.order.update = original.orderUpdate;
     prisma.order.updateMany = original.orderUpdateMany;
     prisma.adminSession.findUnique = original.adminSessionFindUnique;
+    prisma.paymentSettings.findUnique = original.paymentSettingsFindUnique;
+    prisma.paymentSettings.upsert = original.paymentSettingsUpsert;
     global.fetch = original.fetch;
   }
 });

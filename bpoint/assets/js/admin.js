@@ -25,6 +25,7 @@ function adminSidebarHTML(active) {
       ${link('add-product.html','Add Product','add-product','➕')}
       ${link('orders.html','Orders','orders','📦')}
       ${link('customers.html','Customers','customers','👥')}
+      ${link('payment-settings.html','Payment Settings','payment-settings','🏦')}
     </nav>
     <div style="padding:20px 24px;margin-top:20px;border-top:1px solid rgba(255,255,255,.08);">
       <button class="btn btn-outline-gold btn-block btn-sm" style="color:var(--gold);border-color:var(--gold);" onclick="adminLogout()">Logout</button>
@@ -373,7 +374,9 @@ function renderAdminOrdersTable() {
       <td>${o.customer.name}<br><span style="font-size:12px;color:var(--gray-600);">${o.customer.email}</span></td>
       <td>${orderItemsHTML(o)}</td>
       <td>${formatPrice(o.total)}</td>
-      <td><span class="badge paid">${o.paymentMode==='test'?`Test - ${o.paymentStatus}`:o.paymentStatus}</span></td>
+      <td><span class="badge paid">${o.paymentMode==='test'?`Test - ${o.paymentStatus}`:o.paymentMode==='bank_transfer'?`Bank transfer - ${o.paymentStatus}`:o.paymentStatus}</span>
+        ${o.paymentMode === 'bank_transfer' && o.paymentStatus === 'Pending' ? `<button class="btn btn-sm btn-gold" style="margin-top:6px;" onclick="confirmBankTransfer('${o.id}')">Confirm received</button>` : ''}
+      </td>
       <td>
         <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--gray-200);font-size:12.5px;">
           ${statuses.map(s => `<option value="${s}" ${o.status===s?'selected':''} ${s!=='Cancelled'&&!canFulfill?'disabled':''}>${s}</option>`).join('')}
@@ -382,6 +385,22 @@ function renderAdminOrdersTable() {
       <td>${new Date(o.createdAt).toLocaleDateString()}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--gray-600);padding:30px;">No orders found</td></tr>`;
+}
+async function confirmBankTransfer(id) {
+  if (!window.confirm('Confirm that the bank transfer has been received?')) return;
+  try {
+    const response = await fetch(`/api/admin/orders/${encodeURIComponent(id)}/confirm-transfer`, {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to confirm bank transfer.');
+    await refreshAdminOrders();
+    renderAdminOrdersTable();
+    showToast('Bank transfer confirmed');
+  } catch (error) {
+    showToast(error.message || 'Unable to confirm bank transfer.');
+  }
 }
 async function updateOrderStatus(id, status) {
   try {
@@ -410,6 +429,50 @@ async function initAdminCustomersPage() {
   await renderAdminCustomersTable();
   document.getElementById('adminCustomerSearch').addEventListener('input', renderAdminCustomersTable);
 }
+
+async function initAdminPaymentSettingsPage() {
+  if (!await requireAdmin()) return;
+  renderAdminShell('payment-settings');
+  const form = document.getElementById('paymentSettingsForm');
+  const message = document.getElementById('paymentSettingsMessage');
+  try {
+    const response = await fetch('/api/admin/payment-settings', { credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to load payment settings.');
+    form.elements.bankTransferEnabled.checked = Boolean(result.settings.bankTransferEnabled);
+    form.elements.bankName.value = result.settings.bankName || '';
+    form.elements.accountName.value = result.settings.accountName || '';
+    form.elements.accountNumber.value = result.settings.accountNumber || '';
+  } catch (error) {
+    message.textContent = error.message || 'Unable to load payment settings.';
+    message.hidden = false;
+    return;
+  }
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    message.hidden = true;
+    try {
+      const response = await fetch('/api/admin/payment-settings', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bankTransferEnabled: form.elements.bankTransferEnabled.checked,
+          bankName: form.elements.bankName.value.trim(),
+          accountName: form.elements.accountName.value.trim(),
+          accountNumber: form.elements.accountNumber.value.trim()
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save payment settings.');
+      showToast('Payment settings saved');
+    } catch (error) {
+      message.textContent = error.message || 'Unable to save payment settings.';
+      message.hidden = false;
+    }
+  });
+}
+
 async function renderAdminCustomersTable() {
   const q = (document.getElementById('adminCustomerSearch')?.value || '').toLowerCase();
   let list;

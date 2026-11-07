@@ -6,13 +6,13 @@ export const PAYMENT_STATUSES = ['Pending', 'Paid', 'Failed', 'Refunded'];
 
 export const orderSchema = z.object({
   customer: z.object({
-    name: z.string().min(2),
-    email: z.string().email(),
-    phone: z.string().min(6)
-  }),
+    name: z.string().min(2).optional(),
+    email: z.string().email().optional(),
+    phone: z.string().min(6).optional()
+  }).optional(),
   recipient: z.object({
     name: z.string().min(2),
-    phone: z.string().min(6).optional().or(z.literal(''))
+    phone: z.string().min(6)
   }),
   delivery: z.object({
     country: z.string().min(2),
@@ -30,8 +30,20 @@ export const orderSchema = z.object({
     unitPrice: z.number().positive()
   })).min(1),
   shippingMethod: z.string().optional().or(z.literal('')),
+  paymentMethod: z.enum(['paystack', 'bank_transfer']).default('bank_transfer'),
   currency: z.string().refine((value) => SUPPORTED_CURRENCIES.includes(value), { message: 'Currency is not supported.' })
 });
+
+export const paymentSettingsSchema = z.object({
+  bankTransferEnabled: z.boolean(),
+  bankName: z.string().trim().max(100),
+  accountName: z.string().trim().max(100),
+  accountNumber: z.string().trim().max(34).regex(/^[0-9 -]*$/)
+}).refine((settings) => !settings.bankTransferEnabled || (
+  settings.bankName.length > 0 &&
+  settings.accountName.length > 0 &&
+  settings.accountNumber.replace(/\D/g, '').length >= 6
+), { message: 'Enter the bank, account name, and a valid account number before enabling transfers.' });
 
 export function calculateLineTotal(product, quantity = 1) {
   const unitPrice = Number(product.salePrice ?? product.price ?? 0);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { calculateOrderTotal, validateCart, getShippingFee, verifyPaystackReference, canTransitionStatus } from '../src/lib/validation.js';
+import { calculateOrderTotal, validateCart, getShippingFee, verifyPaystackReference, canTransitionStatus, paymentSettingsSchema } from '../src/lib/validation.js';
 
 const catalog = [
   { id: 'p1', name: 'Watch', price: 100, salePrice: 80, stock: 5, published: true },
@@ -47,6 +47,32 @@ test('verifyPaystackReference catches mismatched amount', () => {
 test('canTransitionStatus restricts invalid order flow', () => {
   assert.equal(canTransitionStatus('Pending', 'Shipped'), false);
   assert.equal(canTransitionStatus('Shipped', 'Delivered'), true);
+});
+
+test('payment settings require complete valid account details when transfers are enabled', () => {
+  const valid = paymentSettingsSchema.safeParse({
+    bankTransferEnabled: true,
+    bankName: 'Example Bank',
+    accountName: 'BPoint Gifts',
+    accountNumber: '1234567890'
+  });
+  assert.equal(valid.success, true);
+
+  const invalid = paymentSettingsSchema.safeParse({
+    bankTransferEnabled: true,
+    bankName: '',
+    accountName: '',
+    accountNumber: ''
+  });
+  assert.equal(invalid.success, false);
+
+  const disabled = paymentSettingsSchema.safeParse({
+    bankTransferEnabled: false,
+    bankName: '',
+    accountName: '',
+    accountNumber: ''
+  });
+  assert.equal(disabled.success, true);
 });
 
 test('validateCart approves valid items', () => {

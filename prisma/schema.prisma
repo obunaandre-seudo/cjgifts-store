@@ -75,8 +75,8 @@ model Order {
   id                String      @id @default(cuid())
   orderNumber       String      @unique
   accessToken       String?     @unique
-  customerId        String
-  customer          Customer    @relation(fields: [customerId], references: [id])
+  customerId        String?
+  customer          Customer?   @relation(fields: [customerId], references: [id])
   items             OrderItem[]
   total             Decimal     @db.Decimal(10, 2)
   subtotal          Decimal     @db.Decimal(10, 2)
@@ -90,6 +90,8 @@ model Order {
   deliveryCity      String
   deliveryStreet    String
   deliveryRegion    String?
+  recipientName     String?
+  recipientPhone    String?
   notes             String?
   statusHistory     Json?
   createdAt         DateTime    @default(now())
@@ -123,6 +125,15 @@ model Payment {
   payload   Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PaymentSettings {
+  id                  String   @id @default("default")
+  bankTransferEnabled Boolean  @default(false)
+  bankName            String   @default("")
+  accountName         String   @default("")
+  accountNumber       String   @default("")
+  updatedAt           DateTime @updatedAt
 }
 
 model DeliveryZone {

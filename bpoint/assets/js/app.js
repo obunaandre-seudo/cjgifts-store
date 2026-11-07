@@ -330,15 +330,15 @@ function renderCartPage() {
           </div>
         </div>
       </td>
-      <td>${formatPrice(i.unitPrice)}</td>
-      <td>
+      <td data-label="Price">${formatPrice(i.unitPrice)}</td>
+      <td data-label="Quantity">
         <div class="qty-selector">
           <button onclick="changeCartQty('${i.productId}','${i.variant||''}',-1)">&minus;</button>
           <input value="${i.qty}" readonly>
           <button onclick="changeCartQty('${i.productId}','${i.variant||''}',1)">&plus;</button>
         </div>
       </td>
-      <td><strong>${formatPrice(i.lineTotal)}</strong></td>
+      <td data-label="Total"><strong>${formatPrice(i.lineTotal)}</strong></td>
     </tr>`).join('');
 
   const subtotal = Cart.subtotal();
@@ -376,18 +376,38 @@ async function initCheckoutPage() {
   if (!items.length) { wrap.style.display='none'; empty.style.display='block'; return; }
   wrap.style.display = 'grid'; empty.style.display = 'none';
 
-  const user = Auth.currentUser();
-  if (user) {
-    document.getElementById('coFullName').value = user.name || '';
-    document.getElementById('coEmail').value = user.email || '';
-    document.getElementById('coPhone').value = user.phone || '';
-    if (user.address) {
-      document.getElementById('coAddress').value = user.address.line1 || '';
-      document.getElementById('coCity').value = user.address.city || '';
-      document.getElementById('coState').value = user.address.state || '';
-      document.getElementById('coCountry').value = user.address.country || '';
-      document.getElementById('coPostal').value = user.address.postal || '';
+  const placeOrderButton = document.getElementById('placeOrderBtn');
+  const paymentAvailability = document.getElementById('bankTransferAvailability');
+  try {
+    const response = await fetch('/api/payment-settings');
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to load bank transfer settings.');
+    if (!result.settings?.bankTransferEnabled) throw new Error('Bank transfer has not been configured by the store.');
+    paymentAvailability.textContent = 'Bank transfer is available. You will receive account details after placing your order.';
+    paymentAvailability.style.color = 'var(--gray-600)';
+    const bankDetails = document.getElementById('checkoutBankDetails');
+    bankDetails.hidden = false;
+    const heading = document.createElement('h4');
+    heading.textContent = 'Transfer to this account';
+    bankDetails.append(heading);
+    for (const [label, value] of [
+      ['Bank', result.settings.bankName],
+      ['Account name', result.settings.accountName],
+      ['Account number', result.settings.accountNumber]
+    ]) {
+      const row = document.createElement('div');
+      row.className = 'summary-row';
+      const key = document.createElement('span');
+      key.textContent = label;
+      const detail = document.createElement('strong');
+      detail.textContent = value || '';
+      row.append(key, detail);
+      bankDetails.append(row);
     }
+    placeOrderButton.disabled = false;
+  } catch (error) {
+    paymentAvailability.textContent = error.message || 'Bank transfer is currently unavailable. Please contact the store.';
+    console.error('Unable to load bank transfer settings:', error);
   }
 
   document.getElementById('coItemsSummary').innerHTML = items.map(i => `
@@ -428,14 +448,9 @@ function fieldRequired(id) {
 }
 
 async function submitOrder(items, subtotal, discount, shipping) {
-  const requiredFields = ['coFullName','coEmail','coPhone','coAddress','coCity','coState','coCountry'];
+  const requiredFields = ['coFullName','coPhone','coAddress','coCity','coState','coCountry'];
   let valid = true;
   requiredFields.forEach(id => { if (!fieldRequired(id)) valid = false; });
-  const email = document.getElementById('coEmail').value;
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    document.getElementById('coEmail').closest('.form-group').classList.add('invalid');
-    valid = false;
-  }
   // re-validate stock server-side-style check
   for (const i of items) {
     const fresh = Products.byId(i.productId);
@@ -453,9 +468,8 @@ async function submitOrder(items, subtotal, discount, shipping) {
   let order = null;
   let callbackUrl = '';
   try {
-    const customer = {
+    const recipient = {
       name: document.getElementById('coFullName').value.trim(),
-      email: email.trim().toLowerCase(),
       phone: document.getElementById('coPhone').value.trim()
     };
     const address = {
@@ -469,8 +483,7 @@ async function submitOrder(items, subtotal, discount, shipping) {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        customer,
-        recipient: { name: customer.name, phone: customer.phone },
+        recipient,
         delivery: address,
         items: items.map(item => ({
           productId: item.productId,
@@ -479,6 +492,7 @@ async function submitOrder(items, subtotal, discount, shipping) {
           unitPrice: Number(item.unitPrice)
         })),
         shippingMethod: 'Standard',
+        paymentMethod: 'bank_transfer',
         currency: 'NGN'
       })
     });
@@ -489,46 +503,10 @@ async function submitOrder(items, subtotal, discount, shipping) {
     Cart.clear();
     callbackUrl = new URL(`order-success.html?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(order.accessToken)}`, window.location.href).href;
     await Products.refreshFromServer().catch(() => {});
-
-    const paymentResponse = await fetch('/api/payments/initiate', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken })
-    });
-    const payment = await paymentResponse.json();
-    if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Order saved, but payment could not be started.');
-
-    if (payment.alreadyPaid) {
-      window.location.href = callbackUrl;
-      return;
-    }
-
-    window.location.href = payment.authorizationUrl;
+    window.location.href = callbackUrl;
   } catch (error) {
     if (order) {
-      btn.disabled = false;
-      btn.textContent = 'Continue to Payment';
-      btn.onclick = async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        btn.disabled = true;
-        btn.innerHTML = `<span class="spinner"></span> Starting payment...`;
-        try {
-          const paymentResponse = await fetch('/api/payments/initiate', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: order.id, accessToken: order.accessToken })
-          });
-          const payment = await paymentResponse.json();
-          if (!paymentResponse.ok || !payment.ok) throw new Error(payment.message || 'Payment could not be started.');
-          window.location.href = payment.alreadyPaid ? callbackUrl : payment.authorizationUrl;
-        } catch (retryError) {
-          btn.disabled = false;
-          btn.textContent = 'Continue to Payment';
-          showToast(retryError.message || 'Payment could not be started. Please try again.');
-        }
-      };
-      showToast(error.message || 'Your order is saved. Continue to payment when ready.');
+      showToast(error.message || 'Your order is saved. Open your order confirmation to view transfer details.');
       return;
     }
     btn.disabled = false;
@@ -738,14 +716,42 @@ async function initOrderSuccessPage() {
   if (!order) { wrap.innerHTML = emptyStateHTML('❌','Order not found','We could not locate that order.', 'shop.html', 'Continue Shopping'); return; }
   document.getElementById('successOrderNum').textContent = order.orderNumber;
   document.getElementById('successTotal').textContent = formatPrice(order.total);
-  document.getElementById('successEmail').textContent = order.customer.email;
   Orders.replace([order, ...Orders.all().filter(existing => existing.id !== order.id)]);
   if (order.paymentStatus !== 'Paid') {
     document.querySelector('#successWrap h1').textContent = 'Order Payment Pending';
     const message = wrap.querySelector('.container > p');
-    if (message) message.textContent = 'Your order has been saved. Payment is still pending; we will update its status once confirmed.';
+    if (message) message.textContent = order.paymentMode === 'bank_transfer'
+      ? 'Your order is saved. Please transfer the total using the account details below. We will update your order after confirming receipt.'
+      : 'Your order has been saved. Payment is still pending; we will update its status once confirmed.';
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Order Total';
+    if (order.paymentMode === 'bank_transfer' && order.paymentInstructions) {
+      const instructions = document.createElement('div');
+      instructions.className = 'admin-panel';
+      instructions.style.cssText = 'text-align:left;max-width:420px;margin:24px auto;';
+      const title = document.createElement('h3');
+      title.textContent = 'Bank transfer details';
+      instructions.append(title);
+      for (const [label, value] of [
+        ['Bank', order.paymentInstructions.bankName],
+        ['Account name', order.paymentInstructions.accountName],
+        ['Account number', order.paymentInstructions.accountNumber],
+        ['Amount', formatPrice(order.total)]
+      ]) {
+        const row = document.createElement('div');
+        row.className = 'summary-row';
+        const key = document.createElement('span');
+        key.textContent = label;
+        const detail = document.createElement('strong');
+        detail.textContent = value || '';
+        row.append(key, detail);
+        instructions.append(row);
+      }
+      const reference = document.createElement('p');
+      reference.textContent = `Use order ${order.orderNumber} as your transfer reference.`;
+      instructions.append(reference);
+      wrap.querySelector('.container').insertBefore(instructions, wrap.querySelector('.container > div[style*="display:flex"]'));
+    }
   } else if (order.paymentMode === 'test') {
     document.querySelector('#successWrap h1').textContent = 'Test Payment Successful';
     const message = wrap.querySelector('.container > p');
@@ -755,7 +761,7 @@ async function initOrderSuccessPage() {
   } else {
     document.querySelector('#successWrap h1').textContent = 'Your Order Has Been Placed';
     const message = wrap.querySelector('.container > p');
-    if (message) message.textContent = `Payment confirmed for order ${order.orderNumber}. We’ll send updates to ${order.customer.email}.`;
+    if (message) message.textContent = `Payment confirmed for order ${order.orderNumber}.`;
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Total Paid';
   }
