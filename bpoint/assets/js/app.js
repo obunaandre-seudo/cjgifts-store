@@ -385,25 +385,6 @@ async function initCheckoutPage() {
     if (!result.settings?.bankTransferEnabled) throw new Error('Bank transfer has not been configured by the store.');
     paymentAvailability.textContent = 'Bank transfer is available. You will receive account details after placing your order.';
     paymentAvailability.style.color = 'var(--gray-600)';
-    const bankDetails = document.getElementById('checkoutBankDetails');
-    bankDetails.hidden = false;
-    const heading = document.createElement('h4');
-    heading.textContent = 'Transfer to this account';
-    bankDetails.append(heading);
-    for (const [label, value] of [
-      ['Bank', result.settings.bankName],
-      ['Account name', result.settings.accountName],
-      ['Account number', result.settings.accountNumber]
-    ]) {
-      const row = document.createElement('div');
-      row.className = 'summary-row';
-      const key = document.createElement('span');
-      key.textContent = label;
-      const detail = document.createElement('strong');
-      detail.textContent = value || '';
-      row.append(key, detail);
-      bankDetails.append(row);
-    }
     placeOrderButton.disabled = false;
   } catch (error) {
     paymentAvailability.textContent = error.message || 'Bank transfer is currently unavailable. Please contact the store.';
@@ -727,58 +708,36 @@ async function initOrderSuccessPage() {
   document.getElementById('successTotal').textContent = formatPrice(order.total);
   Orders.replace([order, ...Orders.all().filter(existing => existing.id !== order.id)]);
   if (order.paymentStatus !== 'Paid') {
-    document.querySelector('#successWrap h1').textContent = 'Order Payment Pending';
-    const message = wrap.querySelector('.container > p');
-    if (message) message.textContent = order.paymentMode === 'bank_transfer'
-      ? 'Your order is saved. Please transfer the total using the account details below. We will update your order after confirming receipt.'
+    document.getElementById('paymentConfirmationMark').textContent = '✦';
+    document.getElementById('paymentPageHeading').textContent = 'Your order is saved!';
+    document.getElementById('paymentPageMessage').textContent = order.paymentMode === 'bank_transfer'
+      ? 'Your order is safely saved. Complete your transfer using the account details below, then message us to verify your payment.'
       : 'Your order has been saved. Payment is still pending; we will update its status once confirmed.';
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Order Total';
     if (order.paymentMode === 'bank_transfer' && order.paymentInstructions) {
-      const instructions = document.createElement('div');
-      instructions.className = 'admin-panel';
-      instructions.style.cssText = 'text-align:left;max-width:420px;margin:24px auto;';
-      const title = document.createElement('h3');
-      title.textContent = 'Bank transfer details';
-      instructions.append(title);
-      for (const [label, value] of [
-        ['Bank', order.paymentInstructions.bankName],
-        ['Account name', order.paymentInstructions.accountName],
-        ['Account number', order.paymentInstructions.accountNumber],
-        ['Amount', formatPrice(order.total)]
-      ]) {
-        const row = document.createElement('div');
-        row.className = 'summary-row';
-        const key = document.createElement('span');
-        key.textContent = label;
-        const detail = document.createElement('strong');
-        detail.textContent = value || '';
-        row.append(key, detail);
-        instructions.append(row);
-      }
-      const reference = document.createElement('p');
-      reference.textContent = `Use order ${order.orderNumber} as your transfer reference.`;
-      instructions.append(reference);
-      const whatsapp = document.createElement('a');
-      const whatsappMessage = `Hi BPoint Gifts, I have made a bank transfer for order ${order.orderNumber} in the amount of ${formatPrice(order.total)}. Please verify receipt. I will attach my payment proof here.`;
-      whatsapp.className = 'btn whatsapp-payment-link';
-      whatsapp.href = `https://wa.me/27760260217?text=${encodeURIComponent(whatsappMessage)}`;
-      whatsapp.target = '_blank';
-      whatsapp.rel = 'noopener noreferrer';
-      whatsapp.textContent = 'Send payment proof on WhatsApp';
-      instructions.append(whatsapp);
-      wrap.querySelector('.container').insertBefore(instructions, wrap.querySelector('.container > div[style*="display:flex"]'));
+      document.getElementById('transferBankName').textContent = order.paymentInstructions.bankName || '';
+      document.getElementById('transferAccountName').textContent = order.paymentInstructions.accountName || '';
+      document.getElementById('transferAccountNumber').textContent = order.paymentInstructions.accountNumber || '';
+      document.getElementById('transferAmount').textContent = formatPrice(order.total);
+      document.getElementById('transferDetailsCard').hidden = false;
+      const message = `Hi BPoint Gifts, I have transferred ${formatPrice(order.total)} for order ${order.orderNumber}. Please verify my payment. I will send my proof of payment here.`;
+      document.getElementById('verifyPaymentButton').href = `https://wa.me/27760260217?text=${encodeURIComponent(message)}`;
+    } else if (order.paymentMode === 'bank_transfer') {
+      const loadError = document.getElementById('transferLoadError');
+      loadError.textContent = 'Your order is saved, but we could not load its bank transfer details. Please contact us on WhatsApp before making a transfer.';
+      loadError.hidden = false;
     }
   } else if (order.paymentMode === 'test') {
-    document.querySelector('#successWrap h1').textContent = 'Test Payment Successful';
-    const message = wrap.querySelector('.container > p');
-    if (message) message.textContent = `Your Paystack test payment succeeded for order ${order.orderNumber}. No real money was charged, and this test order will not be fulfilled.`;
+    document.getElementById('paymentConfirmationMark').textContent = '✓';
+    document.getElementById('paymentPageHeading').textContent = 'Test payment successful';
+    document.getElementById('paymentPageMessage').textContent = `Your Paystack test payment succeeded for order ${order.orderNumber}. No real money was charged, and this test order will not be fulfilled.`;
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Test Payment';
   } else {
-    document.querySelector('#successWrap h1').textContent = 'Your Order Has Been Placed';
-    const message = wrap.querySelector('.container > p');
-    if (message) message.textContent = `Payment confirmed for order ${order.orderNumber}.`;
+    document.getElementById('paymentConfirmationMark').textContent = '✓';
+    document.getElementById('paymentPageHeading').textContent = 'Your order is confirmed!';
+    document.getElementById('paymentPageMessage').textContent = `Payment confirmed for order ${order.orderNumber}.`;
     const totalLabel = wrap.querySelector('.summary-row.total > span:first-child');
     if (totalLabel) totalLabel.textContent = 'Total Paid';
   }

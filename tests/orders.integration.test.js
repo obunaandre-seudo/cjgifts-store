@@ -287,6 +287,16 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     const transferInstructions = await transferInstructionsResponse.json();
     assert.equal(transferInstructions.order.paymentInstructions.accountNumber, '1234567890');
 
+    const bankAdminOrdersResponse = await fetch(`${baseUrl}/api/admin/orders`, {
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
+    });
+    const bankAdminOrders = await bankAdminOrdersResponse.json();
+    assert.equal(bankAdminOrdersResponse.status, 200);
+    assert.equal(bankAdminOrders.orders[0].customer.name, 'Gift Recipient');
+    assert.equal(bankAdminOrders.orders[0].customer.phone, '5557654321');
+    assert.equal(bankAdminOrders.orders[0].delivery.street, '2 Transfer Road');
+    assert.equal(bankAdminOrders.orders[0].delivery.city, 'Lagos');
+
     const blockedPaystackResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderId: bankOrderResult.order.id, accessToken: bankOrderResult.order.accessToken })

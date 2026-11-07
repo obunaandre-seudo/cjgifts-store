@@ -361,17 +361,36 @@ function renderAdminOrdersTable() {
   const q = (document.getElementById('adminOrderSearch')?.value || '').toLowerCase();
   const status = document.getElementById('adminOrderStatusFilter')?.value || '';
   let list = Orders.all();
-  if (q) list = list.filter(o => o.orderNumber.toLowerCase().includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.email.toLowerCase().includes(q));
+  if (q) list = list.filter(o => {
+    const customer = o.customer || {};
+    const delivery = o.delivery || {};
+    const searchable = [
+      o.orderNumber, customer.name, customer.email, customer.phone,
+      delivery.street, delivery.city, delivery.region, delivery.country
+    ].join(' ').toLowerCase();
+    return searchable.includes(q);
+  });
   if (status) list = list.filter(o => o.status === status);
 
   const statuses = ['Pending','Processing','Preparing','Shipped','Delivered','Cancelled'];
   const body = document.getElementById('adminOrdersBody');
   body.innerHTML = list.length ? list.map(o => {
     const canFulfill = o.paymentStatus === 'Paid' && o.paymentMode !== 'test';
+    const customer = o.customer || {};
+    const delivery = o.delivery || {};
+    const deliveryAddress = [delivery.street, delivery.city, delivery.region, delivery.country]
+      .filter(Boolean)
+      .map(adminEscapeHTML)
+      .join(', ');
     return `
     <tr>
-      <td><strong>${o.orderNumber}</strong></td>
-      <td>${o.customer.name}<br><span style="font-size:12px;color:var(--gray-600);">${o.customer.email}</span></td>
+      <td><strong>${adminEscapeHTML(o.orderNumber)}</strong></td>
+      <td>
+        <strong>${adminEscapeHTML(customer.name || 'Guest checkout')}</strong>
+        ${customer.phone ? `<span class="order-customer-detail">${adminEscapeHTML(customer.phone)}</span>` : ''}
+        ${customer.email ? `<span class="order-customer-detail">${adminEscapeHTML(customer.email)}</span>` : ''}
+        ${deliveryAddress ? `<span class="order-customer-detail">${deliveryAddress}</span>` : ''}
+      </td>
       <td>${orderItemsHTML(o)}</td>
       <td>${formatPrice(o.total)}</td>
       <td><span class="badge paid">${o.paymentMode==='test'?`Test - ${o.paymentStatus}`:o.paymentMode==='bank_transfer'?`Bank transfer - ${o.paymentStatus}`:o.paymentStatus}</span>

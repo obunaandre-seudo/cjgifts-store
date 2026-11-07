@@ -6,7 +6,7 @@
 <title>Checkout — BPoint Gift Store</title>
 <meta name="theme-color" content="#1b0b33">
 <link rel="icon" type="image/svg+xml" href="assets/images/bpoint-logo.svg">
-<link rel="stylesheet" href="assets/css/style.css?v=9">
+<link rel="stylesheet" href="assets/css/style.css?v=10">
 </head>
 <body>
 <div id="site-header"></div>
@@ -38,9 +38,8 @@
         </div>
         <div class="admin-panel">
           <h3>Bank Transfer</h3>
-          <p style="font-size:14px;">Your order will remain pending until the store confirms receipt of your transfer.</p>
+          <p style="font-size:14px;">Your order details will be saved first. After you place your order, we’ll show you the bank account details and a WhatsApp button to verify your payment.</p>
           <p id="bankTransferAvailability" role="status" style="font-size:14px;color:#9b2c2c;">Checking bank transfer availability…</p>
-          <div id="checkoutBankDetails" class="checkout-bank-details" hidden></div>
         </div>
         <button type="submit" class="btn btn-gold btn-block" id="placeOrderBtn" disabled>Place Order</button>
       </form>
@@ -68,7 +67,7 @@
 
 <script src="assets/js/data.js?v=3"></script>
 <script src="assets/js/layout.js?v=5"></script>
-<script src="assets/js/app.js?v=6"></script>
+<script src="assets/js/app.js?v=7"></script>
 <script>
   renderLayout('shop');
   initCheckoutPage();

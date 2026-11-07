@@ -330,9 +330,33 @@ input[type=checkbox],input[type=radio]{accent-color:var(--violet);width:16px;hei
 .summary-row>span{min-width:0;}
 .summary-row.total{border-top:1px solid var(--head);margin-top:8px;padding-top:16px;font-size:19px;font-weight:700;color:var(--head);}
 .summary-row.total>span:last-child{text-align:right;overflow-wrap:anywhere;}
-.checkout-bank-details{margin-top:20px;padding:18px;background:var(--ivory);border:1px solid var(--line);border-left:3px solid var(--gold);overflow-wrap:anywhere;}
-.checkout-bank-details h4{margin:0 0 8px;color:var(--head);}
-.checkout-bank-details .summary-row strong{text-align:right;overflow-wrap:anywhere;}
+.payment-confirmation{position:relative;overflow:hidden;min-height:60vh;background:radial-gradient(ellipse at 12% 18%,rgba(201,162,39,.12),transparent 30%),radial-gradient(ellipse at 88% 82%,rgba(91,43,181,.1),transparent 32%),var(--ivory);}
+.payment-confirmation-container{max-width:700px;}
+.payment-confirmation-mark{display:grid;width:74px;height:74px;place-items:center;margin:0 auto 18px;border:1px solid rgba(201,162,39,.45);border-radius:50%;background:linear-gradient(145deg,#fff8df,#f2df9e);color:var(--gold-d);font-size:34px;box-shadow:0 10px 32px rgba(201,162,39,.18);}
+.payment-eyebrow,.transfer-eyebrow{display:block;color:var(--gold-d);font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;}
+.payment-confirmation h1{margin:9px 0 10px;font-size:clamp(34px,7vw,48px);}
+.payment-page-message{max-width:520px;margin:0 auto 25px;font-size:15px;}
+.order-confirmation-summary{max-width:460px;margin:0 auto 22px;padding:15px 22px;border:1px solid var(--line);border-radius:10px;background:var(--paper);box-shadow:0 8px 26px rgba(27,11,51,.05);text-align:left;}
+.order-confirmation-summary .summary-row{align-items:center;}
+.order-confirmation-summary .summary-row.total{margin-top:5px;}
+.transfer-details-card{max-width:520px;margin:0 auto 24px;padding:clamp(22px,5vw,34px);border:1px solid rgba(201,162,39,.42);border-radius:14px;background:linear-gradient(150deg,var(--paper),var(--ivory));box-shadow:0 18px 48px rgba(27,11,51,.11),0 0 35px rgba(201,162,39,.08);text-align:left;}
+.transfer-card-heading{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+.transfer-card-icon{display:grid;width:48px;height:48px;flex:none;place-items:center;border-radius:50%;background:linear-gradient(145deg,#fff4ca,#f0dc9a);color:var(--gold-d);font-size:25px;}
+.transfer-card-heading h2{margin:3px 0 0;font-size:27px;}
+.transfer-card-intro{margin:0 0 15px;font-size:13px;}
+.transfer-detail-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line);font-size:13px;}
+.transfer-detail-row>span{color:var(--muted);}
+.transfer-detail-row strong{max-width:68%;color:var(--head);text-align:right;overflow-wrap:anywhere;}
+.transfer-detail-row.account-number-row strong{font-family:var(--font-display);font-size:clamp(21px,5vw,28px);letter-spacing:.07em;color:var(--plum);}
+.transfer-detail-row.transfer-amount-row{border:0;}
+.transfer-detail-row.transfer-amount-row strong{font-size:17px;}
+.transfer-reference-note{margin:14px 0 18px;padding:11px 13px;border-radius:7px;background:rgba(201,162,39,.1);color:var(--text);font-size:12px;}
+.verify-payment-button{width:100%;min-height:54px;border:1px solid #148c52;border-radius:999px;background:linear-gradient(135deg,#26c875,#128c51);box-shadow:0 9px 24px rgba(18,140,81,.24);color:#fff;font-size:13px;letter-spacing:.07em;text-transform:none;}
+.verify-payment-button:hover{transform:translateY(-2px);background:linear-gradient(135deg,#31d987,#0c7643);box-shadow:0 12px 30px rgba(18,140,81,.34);color:#fff;}
+.verify-payment-button svg{width:23px;height:23px;fill:currentColor;}
+.transfer-load-error{max-width:520px;margin:0 auto 20px;padding:14px 16px;border:1px solid rgba(180,35,24,.25);border-radius:8px;background:rgba(180,35,24,.06);color:var(--danger);font-size:13px;}
+.confirmation-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;}
+.order-customer-detail{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.45;overflow-wrap:anywhere;}
 
 /* ---------- forms ---------- */
 input,select,textarea{font:inherit;font-size:15px;width:100%;padding:12px 14px;border:1px solid var(--gray-400);border-radius:var(--r);background:var(--paper);color:var(--text);transition:border-color var(--ease),box-shadow var(--ease);}
@@ -536,7 +560,8 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .form-row{grid-template-columns:1fr;gap:0;}
   .cart-wrap,.checkout-grid,.shop-layout,.pd-grid{grid-template-columns:minmax(0,1fr);gap:24px;}
   .admin-panel,.summary-card{padding:20px;}
-  .checkout-bank-details{padding:14px;}
+  .order-confirmation-summary{padding:12px 16px;}
+  .transfer-details-card{padding:22px 18px;}
   .footer-grid{grid-template-columns:1fr;gap:30px;}
   .gift-cta{padding:30px 22px;}
   .newsletter form{flex-direction:column;}
@@ -575,6 +600,9 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .cart-table tbody tr{padding:10px;}
   .cart-table td[data-label="Quantity"] .qty-selector button{width:32px;height:38px;}
   .cart-table td[data-label="Quantity"] .qty-selector input{width:36px;}
+  .transfer-detail-row{align-items:flex-start;gap:8px;font-size:12px;}
+  .transfer-detail-row strong{max-width:62%;}
+  .transfer-card-heading h2{font-size:24px;}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
