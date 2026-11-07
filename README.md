@@ -45,7 +45,7 @@ This project adds a backend layer for the BPoint Gift Store storefront. Customer
 
 Admin access uses the database configured for the application and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the hosting environment (and in `.env` for local development). Use a unique password with at least 12 characters. The configured admin account is provisioned in the configured database on first setup; there is no browser-stored or demo login.
 
-The application uses Neon PostgreSQL through Prisma. Set `DATABASE_URL` to the direct connection string and `DATABASE_URL_POOLED` to the pooled connection string in the hosting environment or local `.env`. Runtime requests use the pooled URL; Prisma schema operations and seed scripts use the direct URL. Do not commit real credentials.
+The application uses Neon PostgreSQL through Prisma. Set `DATABASE_URL` to the direct connection string and preferably `DATABASE_URL_POOLED` to the pooled connection string in the hosting environment. Runtime requests use `DATABASE_URL_POOLED` when available and fall back to `DATABASE_URL` (or `DATABASE_URL_UNPOOLED`) for Vercel setups that expose only those standard variable names. Prisma schema operations and seed scripts use the direct `DATABASE_URL`. Do not commit real credentials.
 
 ### Vercel deployment
 
@@ -54,7 +54,7 @@ The project includes a Vercel Node.js function configuration in `vercel.json`. C
 Add these environment variables in the Vercel project settings for each environment you use (Production, Preview, and Development as appropriate):
 
 - `DATABASE_URL` — Neon direct/unpooled PostgreSQL URL, used for schema changes and seed tasks.
-- `DATABASE_URL_POOLED` — Neon pooled PostgreSQL URL (hostname contains `-pooler`), used by the app at runtime.
+- `DATABASE_URL_POOLED` — recommended Neon pooled PostgreSQL URL (hostname contains `-pooler`), used by the app at runtime when present. The app can use `DATABASE_URL` if this variable is not present.
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD` — use a unique account and a password of at least 12 characters.
 - `PUBLIC_APP_URL` — the HTTPS origin used for payment callbacks. Set this to the canonical production domain for Production; use the relevant deployment origin when testing Preview payments.
 - `CORS_ORIGIN` — the trusted storefront origin, matching `PUBLIC_APP_URL` with no trailing slash. Add additional origins only when needed, separated by commas.
@@ -63,6 +63,8 @@ Add these environment variables in the Vercel project settings for each environm
 Do not put secret values in Git, source files, chat, or build output. Add them through Vercel's Environment Variables settings and redeploy after changing them. Test payments before enabling live Paystack credentials.
 
 The application schema is PostgreSQL. Use the direct URL for schema setup and the pooled URL for web requests. Keep both database URLs in Vercel's encrypted Environment Variables; never place them in source files or build logs.
+
+To use the same Vercel database locally, authenticate with Vercel, link this directory to the correct Vercel project using `vercel link`, and run `vercel env pull .env.local --environment production`. Local startup loads `.env.local` before `.env`, so the pulled project values take precedence. Both files are Git-ignored. Check that the selected Vercel project and environment point to the branch containing the seeded products before applying any schema changes.
 
 After connecting the repository and setting variables, deploy a Preview first. Verify the HTTPS storefront and `/api/health`; the health endpoint checks database connectivity. Confirm the production domain and Paystack webhook URL before promoting a deployment or accepting live payments.
 

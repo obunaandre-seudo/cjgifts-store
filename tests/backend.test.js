@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { calculateOrderTotal, validateCart, getShippingFee, verifyPaystackReference, canTransitionStatus, paymentSettingsSchema } from '../src/lib/validation.js';
+import { getDatabaseConfigurationError, getRuntimeDatabaseUrl } from '../src/lib/prisma.js';
 
 const catalog = [
   { id: 'p1', name: 'Watch', price: 100, salePrice: 80, stock: 5, published: true },
@@ -73,6 +74,35 @@ test('payment settings require complete valid account details when transfers are
     accountNumber: ''
   });
   assert.equal(disabled.success, true);
+});
+
+test('runtime accepts the standard DATABASE_URL when no pooled URL is configured', () => {
+  const previous = {
+    pooled: process.env.DATABASE_URL_POOLED,
+    direct: process.env.DATABASE_URL,
+    unpooled: process.env.DATABASE_URL_UNPOOLED
+  };
+  try {
+    process.env.DATABASE_URL_POOLED = '';
+    process.env.DATABASE_URL = 'postgresql://db.example.test/app';
+    process.env.DATABASE_URL_UNPOOLED = '';
+    assert.equal(getRuntimeDatabaseUrl(), 'postgresql://db.example.test/app');
+    assert.equal(getDatabaseConfigurationError(), null);
+
+    process.env.DATABASE_URL = '';
+    process.env.DATABASE_URL_UNPOOLED = 'postgresql://direct.example.test/app';
+    assert.equal(getRuntimeDatabaseUrl(), 'postgresql://direct.example.test/app');
+    assert.equal(getDatabaseConfigurationError(), null);
+  } finally {
+    for (const [key, value] of [
+      ['DATABASE_URL_POOLED', previous.pooled],
+      ['DATABASE_URL', previous.direct],
+      ['DATABASE_URL_UNPOOLED', previous.unpooled]
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('validateCart approves valid items', () => {

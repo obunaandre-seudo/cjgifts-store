@@ -4,16 +4,23 @@ import { PrismaClient } from '@prisma/client';
 const globalForPrisma = globalThis;
 const globalKey = 'bpointPrismaClient';
 
+export function getRuntimeDatabaseUrl() {
+  return process.env.DATABASE_URL_POOLED?.trim()
+    || process.env.DATABASE_URL?.trim()
+    || process.env.DATABASE_URL_UNPOOLED?.trim()
+    || null;
+}
+
 export function getDatabaseConfigurationError() {
-  const databaseUrl = process.env.DATABASE_URL_POOLED?.trim();
-  if (!databaseUrl) return 'DATABASE_URL_POOLED is not configured.';
+  const databaseUrl = getRuntimeDatabaseUrl();
+  if (!databaseUrl) return 'Set DATABASE_URL_POOLED or DATABASE_URL in the hosting environment.';
 
   try {
     if (new URL(databaseUrl).protocol !== 'postgresql:') {
-      return 'DATABASE_URL_POOLED must use the postgresql:// protocol.';
+      return 'The runtime database URL must use the postgresql:// protocol.';
     }
   } catch {
-    return 'DATABASE_URL_POOLED must be a valid postgresql:// connection string.';
+    return 'The runtime database URL must be a valid postgresql:// connection string.';
   }
 
   return null;
@@ -25,7 +32,7 @@ function getPrismaClient() {
 
   if (!globalForPrisma[globalKey]) {
     globalForPrisma[globalKey] = new PrismaClient({
-      datasources: { db: { url: process.env.DATABASE_URL_POOLED.trim() } },
+      datasources: { db: { url: getRuntimeDatabaseUrl() } },
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
     });
   }

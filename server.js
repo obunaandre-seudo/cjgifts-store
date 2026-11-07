@@ -315,7 +315,7 @@ app.use('/admin', async (req, res, next) => {
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   if (getDatabaseConfigurationError()) {
-    return errorResponse(res, 503, 'The database is not configured. Set DATABASE_URL_POOLED in the hosting environment.');
+    return errorResponse(res, 503, 'The database is not configured. Set DATABASE_URL_POOLED or DATABASE_URL in the hosting environment.');
   }
   next();
 });

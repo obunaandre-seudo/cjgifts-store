@@ -29,7 +29,8 @@ test('storefront starts without database configuration and database routes expla
       ...process.env,
       VERCEL: '1',
       DATABASE_URL: '',
-      DATABASE_URL_POOLED: ''
+      DATABASE_URL_POOLED: '',
+      DATABASE_URL_UNPOOLED: ''
     }
   });
 });
