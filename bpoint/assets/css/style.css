@@ -110,8 +110,10 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit;}
 
 /* ---------- hero (bento) ---------- */
 .hero{padding:34px 0 0;background:var(--ivory);}
-.hero .container{display:grid;grid-template-columns:1.08fr .92fr;gap:18px;align-items:stretch;}
-.hero-art,.hero-visual{position:relative;min-height:540px;overflow:hidden;border-radius:6px;background:var(--lilac);}
+.hero .container{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;}
+.hero-art,.hero-visual{position:relative;overflow:hidden;border-radius:6px;background:var(--lilac);}
+.hero-art{min-height:560px;}
+.hero-visual{min-height:410px;}
 .hero-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 55%;}
 .hero-copy{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;justify-content:flex-end;padding:38px;color:#fff;background:linear-gradient(180deg,rgba(20,10,26,.06) 10%,rgba(20,10,26,.28) 44%,rgba(20,10,26,.88) 100%);}
 .hero-badge{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-2);font-weight:700;margin-bottom:16px;}
@@ -393,8 +395,17 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .hamburger{display:flex;}
   .top-row{height:66px;}
   .header-actions{margin-left:auto;}
-  .hero .container{grid-template-columns:1fr;}
-  .hero-art,.hero-visual{min-height:0;height:380px;}
+  .hero .container{grid-template-columns:1fr;gap:16px;}
+  .hero-art{min-height:0;height:420px;}
+  .hero-visual{min-height:0;height:148px;}
+  .hero-product-link{position:relative;display:grid;grid-template-columns:minmax(112px,36%) 1fr;height:100%;}
+  .hero-product-image{min-width:0;}
+  .hero-product-label{position:relative;inset:auto;justify-content:center;gap:6px;padding:16px 18px;background:var(--ink);}
+  .hero-product-label>span:first-child{font-size:9px;}
+  .hero-product-label strong{font-size:clamp(17px,3vw,22px);}
+  .hero-product-label>span:last-child{font-size:11px;}
+  .hero-product-empty{position:relative;inset:auto;min-height:148px;justify-content:center;padding:18px;}
+  .hero-product-empty strong{font-size:21px;}
   .hero-copy{padding:30px;}
   .trust-bar{grid-template-columns:1fr 1fr;}
   .trust-bar>div:nth-child(2){border-right:0;}
@@ -418,7 +429,8 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .section{padding:54px 0;}
   .container{padding:0 18px;}
   .announce{font-size:10.5px;letter-spacing:.1em;}
-  .hero-art,.hero-visual{height:340px;}
+  .hero-art{height:360px;}
+  .hero-visual{height:148px;}
   .hero-copy{padding:24px;}
   .hero h1{font-size:clamp(27px,7vw,34px);}
   .hero p.lead{font-size:13px;}
