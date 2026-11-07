@@ -354,6 +354,40 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
 .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--muted);}
 .auth-switch a{color:var(--violet);font-weight:700;}
 :root[data-theme="dark"] .auth-switch a{color:var(--gold-2);}
+.login-wrap{position:relative;isolation:isolate;overflow:hidden;min-height:calc(100vh - 180px);padding:72px 20px;background:radial-gradient(ellipse at 18% 20%,rgba(201,162,39,.2),transparent 34%),radial-gradient(ellipse at 84% 78%,rgba(108,58,150,.22),transparent 38%),linear-gradient(135deg,#170b2a,#30154b 55%,#1d1036);}
+.login-wrap::before,.login-wrap::after{position:absolute;z-index:-1;content:"";border:1px solid rgba(255,255,255,.1);border-radius:50%;pointer-events:none;}
+.login-wrap::before{width:440px;height:440px;top:-250px;right:-110px;box-shadow:0 0 90px rgba(201,162,39,.11);}
+.login-wrap::after{width:360px;height:360px;bottom:-230px;left:-100px;box-shadow:0 0 90px rgba(167,125,214,.14);}
+.login-card{position:relative;max-width:460px;padding:42px 42px 36px;border:1px solid rgba(255,255,255,.2);border-top:2px solid var(--gold-2);border-radius:18px;background:rgba(30,18,45,.88);color:#fff;box-shadow:0 24px 80px rgba(0,0,0,.42),0 0 38px rgba(201,162,39,.13);backdrop-filter:blur(16px);}
+.login-brand{display:flex;align-items:center;justify-content:center;gap:11px;margin:0 auto 20px;color:#fff;font-family:var(--font-display);font-size:23px;font-weight:600;letter-spacing:.01em;}
+.login-brand img{filter:drop-shadow(0 0 12px rgba(212,175,55,.38));}
+.login-brand em{color:var(--gold-2);font-style:normal;}
+.login-eyebrow{display:block;margin-bottom:8px;color:var(--gold-2);text-align:center;text-transform:uppercase;font-size:10px;font-weight:700;letter-spacing:.2em;}
+.login-card h2{color:#fff;font-size:clamp(28px,6vw,34px);}
+.login-card .sub{color:rgba(255,255,255,.72);font-size:14px;}
+.login-card .form-group label{color:rgba(255,255,255,.86);}
+.login-card input{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;}
+.login-card input::placeholder{color:rgba(255,255,255,.48);}
+.login-card input:focus{border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(212,175,55,.2),0 0 22px rgba(212,175,55,.16);}
+.login-card .password-field{position:relative;}
+.login-card .password-field input{padding-right:48px;}
+.login-card .password-toggle{position:absolute;top:50%;right:7px;display:grid;width:36px;height:36px;place-items:center;transform:translateY(-50%);border:0;border-radius:50%;background:transparent;color:rgba(255,255,255,.72);cursor:pointer;}
+.login-card .password-toggle:hover,.login-card .password-toggle:focus-visible{background:rgba(255,255,255,.1);color:var(--gold-2);}
+.login-card .password-toggle:focus-visible{outline:2px solid var(--gold-2);outline-offset:1px;}
+.login-card .password-toggle svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.login-card .password-toggle .eye-off{display:none;}
+.login-card .password-toggle.is-visible .eye-open{display:none;}
+.login-card .password-toggle.is-visible .eye-off{display:block;}
+.login-card .btn{min-height:48px;box-shadow:0 8px 26px rgba(201,162,39,.22);}
+.login-card .btn:hover{box-shadow:0 10px 34px rgba(201,162,39,.38);transform:translateY(-1px);}
+.login-card .auth-switch{color:rgba(255,255,255,.7);}
+.login-card .auth-switch a{color:var(--gold-2);}
+.login-card .form-error{color:#ffb4b4;}
+.whatsapp-float{position:fixed;right:22px;bottom:22px;z-index:2500;display:flex;align-items:center;gap:9px;padding:12px 17px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:linear-gradient(135deg,#20c875,#119958);color:#fff;font-size:13px;font-weight:700;box-shadow:0 10px 28px rgba(0,0,0,.24),0 0 24px rgba(32,200,117,.25);transition:transform var(--ease),box-shadow var(--ease);}
+.whatsapp-float:hover{color:#fff;transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,.3),0 0 30px rgba(32,200,117,.4);}
+.whatsapp-float svg{width:23px;height:23px;fill:currentColor;}
+.whatsapp-payment-link{display:flex;width:max-content;max-width:100%;margin:16px auto 0;background:#128c51;color:#fff;}
+.whatsapp-payment-link:hover{background:#0d7040;color:#fff;}
 
 .empty-state{text-align:center;padding:80px 20px;}
 .empty-state .icon{font-size:52px;margin-bottom:14px;opacity:.55;}
@@ -544,4 +578,14 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
+}
+@media (max-width:600px){
+  .login-wrap{min-height:70vh;padding:48px 16px;}
+  .login-card{padding:34px 26px 30px;}
+  .whatsapp-float{right:14px;bottom:14px;width:50px;height:50px;padding:0;justify-content:center;}
+  .whatsapp-float span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+}
+@media (max-width:380px){
+  .login-wrap{padding:34px 12px;}
+  .login-card{padding:30px 20px 26px;}
 }

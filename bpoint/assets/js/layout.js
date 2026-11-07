@@ -55,7 +55,11 @@ function siteHeaderHTML(active) {
     <a href="contact.html">Contact</a>
     <a href="${user ? 'account.html' : 'login.html'}">${user ? 'My Account' : 'Login / Register'}</a>
     <a href="cart.html">Cart (<span id="mobileCartCount">0</span>)</a>
-  </div>`;
+  </div>
+  <a class="whatsapp-float" href="https://wa.me/27760260217?text=Hi%20BPoint%20Gifts%2C%20I%20need%20help%20with%20my%20order%20or%20payment." target="_blank" rel="noopener noreferrer" aria-label="Contact BPoint Gifts on WhatsApp">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.2A12.6 12.6 0 0 0 5.2 22.3L3.5 28.7l6.6-1.7A12.8 12.8 0 1 0 16 3.2Zm0 23.2c-1.9 0-3.8-.5-5.4-1.5l-.4-.2-3.9 1 1-3.8-.3-.4A10.4 10.4 0 1 1 16 26.4Zm5.7-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-1 1.2-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.5-1.6-.9-.8-1.6-1.8-1.8-2.1-.2-.3 0-.5.1-.7l.5-.6.3-.5c.1-.2 0-.4 0-.6-.1-.2-.7-1.7-1-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.7s1.2 3.1 1.4 3.3c.2.2 2.3 3.6 5.6 5 .8.3 1.4.5 1.9.6.8.2 1.5.2 2.1.1.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.2-.3-.3-.6-.5Z"/></svg>
+    <span>WhatsApp</span>
+  </a>`;
 }
 
 function siteFooterHTML() {

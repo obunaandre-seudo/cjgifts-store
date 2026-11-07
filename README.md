@@ -43,7 +43,7 @@ This project adds a backend layer for the BPoint Gift Store storefront. Customer
 
 ## Admin setup
 
-Admin access uses the database configured for the application and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the hosting environment (and in `.env` for local development). Use a unique password with at least 12 characters. The configured admin account is provisioned in the configured database on first setup; there is no browser-stored or demo login.
+Admin access uses the database configured for the application and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the hosting environment (and in `.env` for local development). Use a unique password with at least 8 characters. The configured admin account is provisioned in the configured database on first setup; there is no browser-stored or demo login.
 
 The application uses Neon PostgreSQL through Prisma. Set `DATABASE_URL` to the direct connection string and preferably `DATABASE_URL_POOLED` to the pooled connection string in the hosting environment. Runtime requests use `DATABASE_URL_POOLED` when available and fall back to `DATABASE_URL` (or `DATABASE_URL_UNPOOLED`) for Vercel setups that expose only those standard variable names. Prisma schema operations and seed scripts use the direct `DATABASE_URL`. Do not commit real credentials.
 
@@ -55,7 +55,7 @@ Add these environment variables in the Vercel project settings for each environm
 
 - `DATABASE_URL` — Neon direct/unpooled PostgreSQL URL, used for schema changes and seed tasks.
 - `DATABASE_URL_POOLED` — recommended Neon pooled PostgreSQL URL (hostname contains `-pooler`), used by the app at runtime when present. The app can use `DATABASE_URL` if this variable is not present.
-- `ADMIN_EMAIL` and `ADMIN_PASSWORD` — use a unique account and a password of at least 12 characters.
+- `ADMIN_EMAIL` and `ADMIN_PASSWORD` — use a unique account and a password of at least 8 characters.
 - `PUBLIC_APP_URL` — the HTTPS origin used for payment callbacks. Set this to the canonical production domain for Production; use the relevant deployment origin when testing Preview payments.
 - `CORS_ORIGIN` — the trusted storefront origin, matching `PUBLIC_APP_URL` with no trailing slash. Add additional origins only when needed, separated by commas.
 - `PAYSTACK_SECRET_KEY` and `PAYSTACK_MODE` — matching test credentials for Preview/testing, and matching live credentials only when ready for real payments.

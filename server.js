@@ -23,6 +23,13 @@ const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
 const ADMIN_SESSION_COOKIE = 'bpoint_admin_session';
 const CUSTOMER_SESSION_COOKIE = 'bpoint_customer_session';
 const PAYMENT_SETTINGS_ID = 'default';
+const DEFAULT_PAYMENT_SETTINGS = Object.freeze({
+  id: PAYMENT_SETTINGS_ID,
+  bankTransferEnabled: true,
+  bankName: 'VFD MFB',
+  accountName: 'MIRACLE CHINEDU ENWEREM',
+  accountNumber: '1042660279'
+});
 
 app.use(cors({
   origin(origin, callback) {
@@ -174,16 +181,17 @@ function serializeOrder(order) {
 }
 
 function emptyPaymentSettings() {
-  return { id: PAYMENT_SETTINGS_ID, bankTransferEnabled: false, bankName: '', accountName: '', accountNumber: '' };
+  return { ...DEFAULT_PAYMENT_SETTINGS };
 }
 
 function publicPaymentSettings(settings) {
-  const enabled = Boolean(settings?.bankTransferEnabled);
+  const activeSettings = settings || DEFAULT_PAYMENT_SETTINGS;
+  const enabled = Boolean(activeSettings.bankTransferEnabled);
   return {
     bankTransferEnabled: enabled,
-    bankName: enabled ? settings.bankName : '',
-    accountName: enabled ? settings.accountName : '',
-    accountNumber: enabled ? settings.accountNumber : ''
+    bankName: enabled ? activeSettings.bankName : '',
+    accountName: enabled ? activeSettings.accountName : '',
+    accountNumber: enabled ? activeSettings.accountNumber : ''
   };
 }
 
@@ -281,7 +289,7 @@ async function requireAdmin(req, res, next) {
 async function ensureConfiguredAdmin() {
   const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || '';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 12) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8) return null;
 
   let admin = await prisma.adminUser.findUnique({ where: { email } });
   const passwordMatches = admin && await bcrypt.compare(password, admin.passwordHash);
@@ -371,7 +379,7 @@ app.post('/api/admin/login', async (req, res, next) => {
     if (!email || !password) return errorResponse(res, 400, 'Email and password are required.');
 
     const admin = await ensureConfiguredAdmin();
-    if (!admin) return errorResponse(res, 503, 'Admin sign-in is not configured. Set ADMIN_EMAIL and a 12-character-or-longer ADMIN_PASSWORD.');
+    if (!admin) return errorResponse(res, 503, 'Admin sign-in is not configured. Set ADMIN_EMAIL and an ADMIN_PASSWORD with at least 8 characters.');
     if (!await bcrypt.compare(password, admin.passwordHash)) return errorResponse(res, 401, 'Invalid email or password.');
 
     const token = randomBytes(32).toString('base64url');
@@ -672,9 +680,10 @@ app.post('/api/orders', async (req, res, next) => {
       const validation = validateCart(payload.items.map((item) => ({ productId: item.productId, quantity: item.quantity })), catalog);
       if (!validation.ok) throw new OrderRequestError(400, 'Cart validation failed.', validation.errors);
 
-      const paymentSettings = payload.paymentMethod === 'bank_transfer'
+      const savedPaymentSettings = payload.paymentMethod === 'bank_transfer'
         ? await tx.paymentSettings.findUnique({ where: { id: PAYMENT_SETTINGS_ID } })
         : null;
+      const paymentSettings = savedPaymentSettings || (payload.paymentMethod === 'bank_transfer' ? DEFAULT_PAYMENT_SETTINGS : null);
       if (payload.paymentMethod === 'bank_transfer' && !paymentSettings?.bankTransferEnabled) {
         throw new OrderRequestError(409, 'Bank transfer is not currently available.');
       }

@@ -129,10 +129,10 @@ model Payment {
 
 model PaymentSettings {
   id                  String   @id @default("default")
-  bankTransferEnabled Boolean  @default(false)
-  bankName            String   @default("")
-  accountName         String   @default("")
-  accountNumber       String   @default("")
+  bankTransferEnabled Boolean  @default(true)
+  bankName            String   @default("VFD MFB")
+  accountName         String   @default("MIRACLE CHINEDU ENWEREM")
+  accountNumber       String   @default("1042660279")
   updatedAt           DateTime @updatedAt
 }
 

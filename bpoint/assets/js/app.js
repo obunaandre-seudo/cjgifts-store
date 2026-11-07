@@ -608,6 +608,15 @@ async function initAccountPage() {
 function initLoginPage() {
   const form = document.getElementById('loginForm');
   if (!form) return;
+  const passwordInput = document.getElementById('loginPassword');
+  const passwordToggle = document.getElementById('toggleLoginPassword');
+  passwordToggle?.addEventListener('click', () => {
+    const showPassword = passwordInput.type === 'password';
+    passwordInput.type = showPassword ? 'text' : 'password';
+    passwordToggle.classList.toggle('is-visible', showPassword);
+    passwordToggle.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+    passwordToggle.setAttribute('aria-pressed', String(showPassword));
+  });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('loginEmail').value.trim();
@@ -750,6 +759,14 @@ async function initOrderSuccessPage() {
       const reference = document.createElement('p');
       reference.textContent = `Use order ${order.orderNumber} as your transfer reference.`;
       instructions.append(reference);
+      const whatsapp = document.createElement('a');
+      const whatsappMessage = `Hi BPoint Gifts, I have made a bank transfer for order ${order.orderNumber} in the amount of ${formatPrice(order.total)}. Please verify receipt. I will attach my payment proof here.`;
+      whatsapp.className = 'btn whatsapp-payment-link';
+      whatsapp.href = `https://wa.me/27760260217?text=${encodeURIComponent(whatsappMessage)}`;
+      whatsapp.target = '_blank';
+      whatsapp.rel = 'noopener noreferrer';
+      whatsapp.textContent = 'Send payment proof on WhatsApp';
+      instructions.append(whatsapp);
       wrap.querySelector('.container').insertBefore(instructions, wrap.querySelector('.container > div[style*="display:flex"]'));
     }
   } else if (order.paymentMode === 'test') {
