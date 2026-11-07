@@ -3,30 +3,31 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL_POOLED")
+  directUrl = env("DATABASE_URL")
 }
 
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  phone     String?
+  id           String           @id @default(cuid())
+  name         String
+  email        String           @unique
+  phone        String?
   passwordHash String?
-  address   Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
-  sessions  CustomerSession[]
+  address      Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  orders       Order[]
+  sessions     CustomerSession[]
 }
 
 model CustomerSession {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
   customerId String
-  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 
 model AdminUser {
@@ -49,51 +50,51 @@ model AdminSession {
 }
 
 model Product {
-  id             String      @id @default(cuid())
-  sku            String      @unique
-  name           String
-  slug           String      @unique
+  id              String      @id @default(cuid())
+  sku             String      @unique
+  name            String
+  slug            String      @unique
   shortDescription String?
-  description    String?
-  price          Decimal     @db.Decimal(10, 2)
-  salePrice      Decimal?    @db.Decimal(10, 2)
-  priceCurrency  String      @default("USD")
-  stock          Int         @default(0)
-  category       String
-  featured       Boolean     @default(false)
-  specialOffer   Boolean     @default(false)
-  published      Boolean     @default(true)
-  images         Json
-  variants       Json
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  orderItems     OrderItem[]
+  description     String?
+  price           Decimal     @db.Decimal(10, 2)
+  salePrice       Decimal?    @db.Decimal(10, 2)
+  priceCurrency   String      @default("USD")
+  stock           Int         @default(0)
+  category        String
+  featured        Boolean     @default(false)
+  specialOffer    Boolean     @default(false)
+  published       Boolean     @default(true)
+  images          Json
+  variants        Json
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  orderItems      OrderItem[]
 }
 
 model Order {
-  id               String      @id @default(cuid())
-  orderNumber      String      @unique
-  accessToken      String?     @unique
-  customerId       String
-  customer         Customer    @relation(fields: [customerId], references: [id])
-  items            OrderItem[]
-  total            Decimal     @db.Decimal(10, 2)
-  subtotal         Decimal     @db.Decimal(10, 2)
-  shippingFee      Decimal     @db.Decimal(10, 2)
-  tax              Decimal     @db.Decimal(10, 2)
-  currency         String      @default("NGN")
-  paymentStatus    String      @default("Pending")
-  paymentMode      String?
-  fulfillmentStatus String     @default("Pending")
-  deliveryCountry  String
-  deliveryCity     String
-  deliveryStreet   String
-  deliveryRegion   String?
-  notes            String?
-  statusHistory    Json?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  payments         Payment[]
+  id                String      @id @default(cuid())
+  orderNumber       String      @unique
+  accessToken       String?     @unique
+  customerId        String
+  customer          Customer    @relation(fields: [customerId], references: [id])
+  items             OrderItem[]
+  total             Decimal     @db.Decimal(10, 2)
+  subtotal          Decimal     @db.Decimal(10, 2)
+  shippingFee       Decimal     @db.Decimal(10, 2)
+  tax               Decimal     @db.Decimal(10, 2)
+  currency          String      @default("NGN")
+  paymentStatus     String      @default("Pending")
+  paymentMode       String?
+  fulfillmentStatus String      @default("Pending")
+  deliveryCountry   String
+  deliveryCity      String
+  deliveryStreet    String
+  deliveryRegion    String?
+  notes             String?
+  statusHistory     Json?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  payments          Payment[]
 }
 
 model OrderItem {
@@ -110,18 +111,18 @@ model OrderItem {
 }
 
 model Payment {
-  id           String   @id @default(cuid())
-  orderId      String
-  order        Order    @relation(fields: [orderId], references: [id])
-  reference    String   @unique
-  amount       Decimal  @db.Decimal(10, 2)
-  currency     String
-  provider     String   @default("paystack")
-  mode         String   @default("live")
-  status       String   @default("Pending")
-  payload      Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  reference String   @unique
+  amount    Decimal  @db.Decimal(10, 2)
+  currency  String
+  provider  String   @default("paystack")
+  mode      String   @default("live")
+  status    String   @default("Pending")
+  payload   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model DeliveryZone {

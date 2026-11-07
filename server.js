@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './src/lib/load-env.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
@@ -10,6 +10,9 @@ import { prisma } from './src/lib/prisma.js';
 import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference } from './src/lib/validation.js';
 
 const app = express();
+
+// Optional gzip/brotli-style compression: active only if `npm i compression` has been run.
+try { const { default: compression } = await import('compression'); app.use(compression()); } catch { /* not installed — fine */ }
 const PORT = Number(process.env.PORT || 3001);
 const ROOT_DIR = process.cwd();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
@@ -17,8 +20,8 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const ALLOWED_ORIGINS = new Set((process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean));
 const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : IS_PRODUCTION ? '' : `http://localhost:${PORT}`);
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 86400000);
-const ADMIN_SESSION_COOKIE = 'cjgifts_admin_session';
-const CUSTOMER_SESSION_COOKIE = 'cjgifts_customer_session';
+const ADMIN_SESSION_COOKIE = 'bpoint_admin_session';
+const CUSTOMER_SESSION_COOKIE = 'bpoint_customer_session';
 
 app.use(cors({
   origin(origin, callback) {
@@ -28,7 +31,8 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '2mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('dev'));
+morgan.token('path', (req) => req.path);
+app.use(morgan(':method :path :status :response-time ms - :res[content-length]'));
 
 function errorResponse(res, status, message, details) {
   const payload = { ok: false, message };
@@ -292,29 +296,48 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(ROOT_DIR, 'cjgifts')));
-
-app.get('/api/health', async (req, res) => {
-  await prisma.$queryRaw`SELECT 1`;
-  const [products, orders] = await Promise.all([prisma.product.count(), prisma.order.count()]);
-  res.json({ ok: true, status: 'ok', database: 'connected', products, orders, timestamp: Date.now() });
-});
-
-app.get('/api/products', async (req, res) => {
-  const products = await prisma.product.findMany({ where: { published: true }, orderBy: { createdAt: 'desc' } });
-  res.json({ ok: true, products: products.map(serializeProduct) });
-});
-
-app.get('/api/products/:id', async (req, res) => {
-  const product = await prisma.product.findFirst({
-    where: { OR: [{ id: req.params.id }, { slug: req.params.id }, { sku: req.params.id }], published: true }
-  });
-
-  if (!product) {
-    return errorResponse(res, 404, 'Product not found.');
+app.use(express.static(path.join(ROOT_DIR, 'bpoint'), {
+  etag: true,
+  setHeaders(res, filePath) {
+    // HTML always revalidates; versioned CSS/JS/images are cached for a week.
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    else res.setHeader('Cache-Control', 'public, max-age=604800');
   }
+}));
 
-  res.json({ ok: true, product: serializeProduct(product) });
+app.get('/api/health', async (req, res, next) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    const [products, orders] = await Promise.all([prisma.product.count(), prisma.order.count()]);
+    return res.json({ ok: true, status: 'ok', database: 'connected', products, orders, timestamp: Date.now() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/products', async (req, res, next) => {
+  try {
+    const products = await prisma.product.findMany({ where: { published: true }, orderBy: { createdAt: 'desc' } });
+    return res.json({ ok: true, products: products.map(serializeProduct) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/products/:id', async (req, res, next) => {
+  try {
+    const product = await prisma.product.findFirst({
+      where: { OR: [{ id: req.params.id }, { slug: req.params.id }, { sku: req.params.id }], published: true }
+    });
+
+    if (!product) {
+      return errorResponse(res, 404, 'Product not found.');
+    }
+
+    return res.json({ ok: true, product: serializeProduct(product) });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.post('/api/admin/login', async (req, res, next) => {
@@ -641,7 +664,7 @@ app.post('/api/payments/initiate', async (req, res, next) => {
     if (order.currency !== 'NGN') return errorResponse(res, 409, 'This order has an unsupported payment currency.');
     let payment = await prisma.payment.findFirst({ where: { orderId: order.id, status: 'Pending', mode: paystack.mode }, orderBy: { createdAt: 'desc' } });
     if (!payment) {
-      const reference = `cjgifts_${order.id}_${randomBytes(12).toString('hex')}`;
+      const reference = `bpoint_${order.id}_${randomBytes(12).toString('hex')}`;
       payment = await prisma.payment.create({ data: {
         orderId: order.id,
         reference,
@@ -820,22 +843,24 @@ app.get('/api/customer/orders', requireCustomer, async (req, res, next) => {
   }
 });
 
+app.use('/api', (req, res) => errorResponse(res, 404, 'API endpoint not found.'));
+
 app.get('*', (req, res) => {
-  res.sendFile(path.join(ROOT_DIR, 'cjgifts', 'index.html'));
+  res.sendFile(path.join(ROOT_DIR, 'bpoint', 'index.html'));
 });
 
 app.use((err, req, res, next) => {
-  console.error('Unhandled API error:', err);
   const status = Number(err.statusCode || err.status);
   if (status >= 400 && status < 500) {
     return errorResponse(res, status, status === 400 ? 'Invalid request body.' : 'Request could not be processed.');
   }
+  console.error('Unhandled API error:', err);
   res.status(500).json({ ok: false, message: 'Internal server error.' });
 });
 
 if (process.env.VERCEL !== '1') {
   app.listen(PORT, () => {
-    console.log(`CJ Gifts backend listening on http://localhost:${PORT}`);
+    console.log(`BPoint Gift Store backend listening on http://localhost:${PORT}`);
   });
 }
 

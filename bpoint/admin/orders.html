@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Orders — BPoint Gift Store Admin</title>
+<meta name="theme-color" content="#1b0b33">
+<link rel="icon" type="image/svg+xml" href="../assets/images/bpoint-logo.svg">
+<link rel="stylesheet" href="../assets/css/style.css?v=3">
+</head>
+<body class="admin-body">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebar"></aside>
+  <main class="admin-main">
+    <div class="admin-topbar"><h1>Orders</h1></div>
+
+    <div class="admin-panel">
+      <p id="adminOrderRefreshMessage" role="status" style="color:#9b2c2c;margin:0 0 14px;" hidden></p>
+      <div class="toolbar" style="margin-bottom:20px;">
+        <input type="search" id="adminOrderSearch" placeholder="Search by order # or customer..." style="padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;min-width:260px;">
+        <select id="adminOrderStatusFilter">
+          <option value="">All Statuses</option>
+          <option>Pending</option><option>Processing</option><option>Preparing</option>
+          <option>Shipped</option><option>Delivered</option><option>Cancelled</option>
+        </select>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Order #</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody id="adminOrdersBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="../assets/js/data.js?v=3"></script>
+<script src="../assets/js/layout.js?v=3"></script>
+<script src="../assets/js/app.js?v=3"></script>
+<script src="../assets/js/admin.js?v=3"></script>
+<script>
+  initAdminOrdersPage();
+</script>
+</body>
+</html>

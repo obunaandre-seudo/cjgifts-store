@@ -1,14 +1,21 @@
 {
-  "name": "cjgifts-store",
+  "name": "bpoint-gift-store",
   "version": "1.0.0",
-  "description": "CJ Gifts e-commerce backend and static storefront",
+  "description": "BPoint Gift Store e-commerce backend and static storefront",
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "node -e \"const p=require('node:path');const {execFileSync}=require('node:child_process');const m=process.env.npm_package_json;if(!m)throw Error('npm_package_json is unavailable');console.log('Prisma install manifest: '+m);execFileSync(process.execPath,[p.join(p.dirname(m),'scripts/generate-prisma-client.js')],{stdio:'inherit'})\"",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "db:generate": "prisma generate",
+    "db:generate": "node scripts/generate-prisma-client.js",
+    "db:mysql:generate": "prisma generate --schema=prisma/schema.mysql.prisma",
+    "db:postgres:source:generate": "prisma generate --schema=prisma/schema.postgres.prisma",
+    "db:migration:clients:generate": "npm run db:mysql:generate && npm run db:postgres:source:generate",
+    "db:mysql:check": "node scripts/check-namecheap-mysql.js",
+    "db:mysql:push": "node scripts/push-namecheap-mysql-schema.js",
+    "db:mysql:verify": "node scripts/verify-neon-mysql-migration.js",
+    "db:mysql:migrate": "node scripts/migrate-neon-to-mysql.js",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:convert-naira": "node prisma/convert-prices-to-naira.js",
@@ -21,8 +28,14 @@
     "backend",
     "paystack"
   ],
-  "author": "CJ Gifts",
+  "author": "BPoint Gift Store",
   "license": "MIT",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "dependencies": {
     "@prisma/client": "^6.3.0",
     "bcryptjs": "^2.4.3",
@@ -30,10 +43,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "morgan": "^1.10.0",
+    "prisma": "^6.3.0",
     "uuid": "^11.0.2",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "prisma": "^6.3.0"
+    "zod": "^4.6.7"
   }
 }

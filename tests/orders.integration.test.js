@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 
 process.env.VERCEL = '1';
+process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/bpoint_test';
+process.env.DATABASE_URL_POOLED = 'postgresql://test:test@localhost:5432/bpoint_test';
 process.env.PAYSTACK_SECRET_KEY = 'sk_test_integration_only';
 process.env.PAYSTACK_MODE = 'test';
 process.env.PUBLIC_APP_URL = 'https://shop.example.test';
@@ -126,6 +128,10 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
   try {
     await new Promise(resolve => listener.once('listening', resolve));
     const baseUrl = `http://127.0.0.1:${listener.address().port}`;
+    const unknownApiResponse = await fetch(`${baseUrl}/api/not-a-route`);
+    assert.equal(unknownApiResponse.status, 404);
+    assert.equal((await unknownApiResponse.json()).message, 'API endpoint not found.');
+
     const malformedPaymentResponse = await fetch(`${baseUrl}/api/payments/initiate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{orderId:broken-json}'
     });
@@ -202,13 +208,13 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
 
     const unpaidStatusResponse = await fetch(`${baseUrl}/api/admin/orders/${created.order.id}/status`, {
       method: 'PUT',
-      headers: { Cookie: 'cjgifts_admin_session=test-session', 'Content-Type': 'application/json' },
+      headers: { Cookie: 'bpoint_admin_session=test-session', 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Shipped' })
     });
     assert.equal(unpaidStatusResponse.status, 409);
 
     const adminResponse = await fetch(`${baseUrl}/api/admin/orders`, {
-      headers: { Cookie: 'cjgifts_admin_session=test-session' }
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
     });
     const admin = await adminResponse.json();
     assert.equal(adminResponse.status, 200);
@@ -219,7 +225,7 @@ test('checkout redirects to Paystack test checkout and confirms payment through 
     assert.equal(admin.orders[0].paymentMode, 'test');
 
     const customersResponse = await fetch(`${baseUrl}/api/admin/customers`, {
-      headers: { Cookie: 'cjgifts_admin_session=test-session' }
+      headers: { Cookie: 'bpoint_admin_session=test-session' }
     });
     const customers = await customersResponse.json();
     assert.equal(customersResponse.status, 200);

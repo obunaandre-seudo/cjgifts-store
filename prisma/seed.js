@@ -1,69 +1,26 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const directDatabaseUrl = process.env.DATABASE_URL?.trim();
+if (!directDatabaseUrl || new URL(directDatabaseUrl).protocol !== 'postgresql:') {
+  throw new Error('DATABASE_URL must be set to the direct Neon PostgreSQL connection string to seed.');
+}
+const prisma = new PrismaClient({ datasources: { db: { url: directDatabaseUrl } } });
 
-const testProducts = [
-  {
-    sku: 'CJG-TEST-001',
-    name: 'Test Gift Watch',
-    slug: 'test-gift-watch',
-    shortDescription: 'A sample watch listing for testing the Neon catalog.',
-    description: 'Test product. Do not fulfill as a real customer order.',
-    price: '77485',
-    salePrice: '61985',
-    priceCurrency: 'NGN',
-    stock: 20,
-    category: 'products-accessories',
-    featured: true,
-    specialOffer: true,
-    published: true,
-    images: ['https://picsum.photos/seed/cjgifts-test-watch/700/700'],
-    variants: []
-  },
-  {
-    sku: 'CJG-TEST-002',
-    name: 'Test Candle Set',
-    slug: 'test-candle-set',
-    shortDescription: 'A sample candle listing for testing product reads.',
-    description: 'Test product. Do not fulfill as a real customer order.',
-    price: '37975',
-    priceCurrency: 'NGN',
-    stock: 35,
-    category: 'gift-ideas',
-    featured: true,
-    specialOffer: false,
-    published: true,
-    images: ['https://picsum.photos/seed/cjgifts-test-candle/700/700'],
-    variants: []
-  },
-  {
-    sku: 'CJG-TEST-003',
-    name: 'Test Gift Box',
-    slug: 'test-gift-box',
-    shortDescription: 'A sample gift box listing for checking the catalog.',
-    description: 'Test product. Do not fulfill as a real customer order.',
-    price: '122450',
-    priceCurrency: 'NGN',
-    stock: 12,
-    category: 'gift-ideas',
-    featured: false,
-    specialOffer: true,
-    published: true,
-    images: ['https://picsum.photos/seed/cjgifts-test-box/700/700'],
-    variants: []
-  }
+const deliveryZones = [
+  { code: 'NG', country: 'Nigeria', shippingFee: '6975', active: true },
+  { code: 'US', country: 'United States', shippingFee: '18600', active: true },
+  { code: 'GB', country: 'United Kingdom', shippingFee: '21700', active: true },
+  { code: 'KE', country: 'Kenya', shippingFee: '13950', active: true }
 ];
 
 try {
-  for (const product of testProducts) {
-    await prisma.product.upsert({
-      where: { sku: product.sku },
-      update: product,
-      create: product
-    });
-  }
-  console.log(`Seeded ${testProducts.length} test products.`);
+  await prisma.$transaction(deliveryZones.map((zone) => prisma.deliveryZone.upsert({
+    where: { code: zone.code },
+    update: { country: zone.country, shippingFee: zone.shippingFee, active: zone.active },
+    create: zone
+  })));
+  console.log(`Seeded ${deliveryZones.length} delivery zones; existing products and customer data were not changed.`);
 } finally {
   await prisma.$disconnect();
 }

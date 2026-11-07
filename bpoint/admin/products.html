@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Products — BPoint Gift Store Admin</title>
+<meta name="theme-color" content="#1b0b33">
+<link rel="icon" type="image/svg+xml" href="../assets/images/bpoint-logo.svg">
+<link rel="stylesheet" href="../assets/css/style.css?v=3">
+</head>
+<body class="admin-body">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebar"></aside>
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <h1>Products</h1>
+      <a href="add-product.html" class="btn btn-gold btn-sm">+ Add Product</a>
+    </div>
+
+    <div class="admin-panel">
+      <div class="toolbar" style="margin-bottom:20px;">
+        <input type="search" id="adminProductSearch" placeholder="Search by name or SKU..." style="padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;min-width:240px;">
+        <select id="adminCategoryFilter">
+          <option value="">All Categories</option>
+          <option value="gift-ideas">Gift Ideas</option>
+        </select>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="adminProductsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="../assets/js/data.js?v=3"></script>
+<script src="../assets/js/layout.js?v=3"></script>
+<script src="../assets/js/app.js?v=3"></script>
+<script src="../assets/js/admin.js?v=3"></script>
+<script>
+  initAdminProductsPage();
+</script>
+</body>
+</html>

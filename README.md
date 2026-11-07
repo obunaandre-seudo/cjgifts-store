@@ -1,11 +1,11 @@
-# CJ Gifts Store Backend
+# BPoint Gift Store Backend
 
-This project adds a backend layer for the CJ Gifts storefront. Customer account credentials, sessions, and profile details are stored in PostgreSQL through Prisma; the storefront keeps a small public profile cache in browser storage. Other storefront features still use a mix of server APIs and browser storage.
+This project adds a backend layer for the BPoint Gift Store storefront. Customer account credentials, sessions, and profile details are stored through Prisma; the storefront keeps a small public profile cache in browser storage. Other storefront features still use a mix of server APIs and browser storage.
 
 ## Stack
 
 - Node.js + Express
-- JSON file persistence for local development
+- Prisma-backed relational persistence for accounts, catalog, orders, and payments
 - bcryptjs for password hashing
 - Paystack-compatible transaction initialization and verification hooks
 - Node.js test runner for backend validation
@@ -40,20 +40,43 @@ This project adds a backend layer for the CJ Gifts storefront. Customer account 
 
 ## Admin setup
 
-Admin access uses the Neon database and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in Vercel Project Settings → Environment Variables (and in `.env` for local development). Use a unique password with at least 12 characters. The configured admin account is provisioned in Neon on the first successful setup; there is no browser-stored or demo login.
+Admin access uses the database configured for the application and an HttpOnly session cookie. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the hosting environment (and in `.env` for local development). Use a unique password with at least 12 characters. The configured admin account is provisioned in the configured database on first setup; there is no browser-stored or demo login.
 
-Set `DATABASE_URL` in Vercel to the Neon connection string. The admin password is stored as a bcrypt hash, and session tokens are stored hashed in the database. Do not put real credentials in Git or share them in chat.
+The application uses Neon PostgreSQL through Prisma. Set `DATABASE_URL` to the direct connection string and `DATABASE_URL_POOLED` to the pooled connection string in the hosting environment or local `.env`. Runtime requests use the pooled URL; Prisma schema operations and seed scripts use the direct URL. Do not commit real credentials.
 
-After configuring `DATABASE_URL`, apply the schema and create the sample catalog with:
+### Vercel deployment
 
-```sh
-npm run db:generate
-npm run db:push
-npm run db:convert-naira
-npm run db:seed
-```
+The project includes a Vercel Node.js function configuration in `vercel.json`. Connect the project repository in the Vercel dashboard, set the project root to this directory, and use Node.js 24 (the supported version range is declared in `package.json`). Vercel installs the dependencies and generates the Prisma client during installation; the API and storefront are served by `server.js`.
 
-The one-time conversion changes existing USD product prices and sale prices to naira at ₦1,550 per USD. It marks converted records as NGN, so rerunning it will not convert them again. New products created in the admin are saved in naira.
+Add these environment variables in the Vercel project settings for each environment you use (Production, Preview, and Development as appropriate):
+
+- `DATABASE_URL` — Neon direct/unpooled PostgreSQL URL, used for schema changes and seed tasks.
+- `DATABASE_URL_POOLED` — Neon pooled PostgreSQL URL (hostname contains `-pooler`), used by the app at runtime.
+- `ADMIN_EMAIL` and `ADMIN_PASSWORD` — use a unique account and a password of at least 12 characters.
+- `PUBLIC_APP_URL` — the HTTPS origin used for payment callbacks. Set this to the canonical production domain for Production; use the relevant deployment origin when testing Preview payments.
+- `CORS_ORIGIN` — the trusted storefront origin, matching `PUBLIC_APP_URL` with no trailing slash. Add additional origins only when needed, separated by commas.
+- `PAYSTACK_SECRET_KEY` and `PAYSTACK_MODE` — matching test credentials for Preview/testing, and matching live credentials only when ready for real payments.
+
+Do not put secret values in Git, source files, chat, or build output. Add them through Vercel's Environment Variables settings and redeploy after changing them. Test payments before enabling live Paystack credentials.
+
+The application schema is PostgreSQL. Use the direct URL for schema setup and the pooled URL for web requests. Keep both database URLs in Vercel's encrypted Environment Variables; never place them in source files or build logs.
+
+After connecting the repository and setting variables, deploy a Preview first. Verify the HTTPS storefront and `/api/health`; the health endpoint checks database connectivity. Confirm the production domain and Paystack webhook URL before promoting a deployment or accepting live payments.
+
+### Database setup and safe seed
+
+The Neon database URLs were shared in chat and must be rotated before use. After rotation, add the direct URL as `DATABASE_URL` and the `-pooler` URL as `DATABASE_URL_POOLED` in Vercel and in a local `.env` used for setup. Do not commit either value.
+
+Review or create a Neon branch/backup before applying schema changes. From a trusted local environment with the rotated direct URL configured, run `npm run db:push` to synchronize `prisma/schema.prisma`, then `npm run db:seed` to idempotently seed the four configured delivery zones. The seed does not create sample products or change customer/order data. Do not run these commands as part of the Vercel build or startup.
+## Database schemas and migration utilities
+
+`prisma/schema.prisma` is the canonical PostgreSQL schema for the application. `DATABASE_URL` is the direct connection; `DATABASE_URL_POOLED` is the pooled runtime connection. `npm run db:generate` generates the app client from this schema. `prisma/schema.mysql.prisma` and `prisma/schema.postgres.prisma` are isolated clients retained only for the historical Neon-to-Namecheap migration and verification tooling; neither is used by the app.
+
+The migration tools use `NEON_SOURCE_DATABASE_URL` (read-only source) and `NAMECHEAP_DB_HOST`, `NAMECHEAP_DB_PORT`, `NAMECHEAP_DB_NAME`, `NAMECHEAP_DB_USER`, and `NAMECHEAP_DB_PASSWORD` (target). These settings are separate from the app's `DATABASE_URL`. `npm install` generates the PostgreSQL app client through the portable `postinstall` script. Migration clients are not part of production app installation; generate them when needed with `npm run db:migration:clients:generate`, `npm run db:mysql:generate`, or `npm run db:postgres:source:generate`.
+
+The copy utility is for a fresh, empty target only. It reads Neon rows in a read-only repeatable-read transaction, checks relations and MySQL field and unique-value compatibility, then copies in dependency order. An interrupted copy can leave partial data; prepare a fresh empty target before retrying. `npm run db:mysql:verify` compares counts, IDs, row values, unique values, and relationships between Neon and MySQL. MariaDB JSON fields are handled through Prisma's generated client.
+
+`npm run db:mysql:check` checks a fresh target without creating tables. `npm run db:mysql:push` requires `CJGIFTS_SCHEMA_CREATE_CONFIRM=CREATE_SCHEMA_ON_VERIFIED_EMPTY_NAMECHEAP_DATABASE` and checks that target before creating the schema. `npm run db:mysql:migrate` requires `CJGIFTS_MIGRATION_CONFIRM=COPY_NEON_READ_ONLY_TO_EMPTY_NAMECHEAP_TARGET`. Keep the migration source URL and target credentials out of Git.
 
 ## Paystack configuration
 
@@ -77,6 +100,12 @@ This includes validation tests for totals, cart rules, and duplicate payment han
 
 ## Notes
 
-- Admin identity, sessions, and the public product API use Neon/PostgreSQL through Prisma.
-- Other local storefront state such as customer accounts, cart contents, and orders still uses the JSON/browser storage implementation and is not yet cross-device persistent.
+- Admin identity, customer accounts, sessions, catalog, orders, and payments use Neon PostgreSQL through Prisma.
+- Cart contents and the small public profile cache use browser storage.
 - Shipping and delivery zones are intentionally configurable and honest: unsupported destinations are blocked rather than guessed.
+
+## Performance notes
+
+- The storefront uses system fonts only (no Google Fonts), no page-transition overlay and no looping animations.
+- Static assets are cached for 7 days (HTML always revalidates). CSS/JS links carry `?v=3` — bump it when you change those files.
+- Optional: run `npm i compression` to enable response compression automatically.
