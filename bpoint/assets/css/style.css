@@ -83,7 +83,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit;}
 .main-header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--line);}
 .top-row{display:flex;align-items:center;gap:28px;height:76px;}
 .logo{display:flex;align-items:center;gap:11px;font-family:var(--font-display);font-size:23px;font-weight:600;color:var(--head);letter-spacing:-.01em;flex:none;}
-.logo .logo-image{width:40px;height:40px;border-radius:9px;}
+.logo .logo-image{width:54px;height:40px;object-fit:contain;border-radius:5px;}
+.admin-sidebar .logo-image{width:52px;height:40px;object-fit:contain;}
+.login-brand img{width:60px;height:46px;object-fit:contain;}
 .logo span.accent{color:var(--gold-d);font-style:italic;font-weight:500;margin-left:-4px;}
 :root[data-theme="dark"] .logo span.accent{color:var(--gold-2);}
 .main-nav{display:flex;gap:30px;align-items:center;margin:0 auto;}
@@ -524,7 +526,7 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .announce{font-size:10px;letter-spacing:.07em;padding:8px 10px;}
   .top-row{gap:8px;}
   .logo{font-size:19px;gap:7px;}
-  .logo .logo-image{width:34px;height:34px;}
+  .logo .logo-image{width:46px;height:34px;}
   .header-actions{gap:0;}
   .icon-btn{width:38px;height:38px;}
   .hamburger{margin-left:3px;}
@@ -589,7 +591,7 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;}
   .container{padding:0 12px;}
   .icon-btn{width:34px;height:36px;}
   .logo{font-size:17px;}
-  .logo .logo-image{width:30px;height:30px;}
+  .logo .logo-image{width:42px;height:32px;}
   .product-grid{grid-template-columns:minmax(0,1fr);}
   .pc-actions{flex-direction:row;}
   .pc-actions .btn{padding:10px 6px;font-size:9px;}

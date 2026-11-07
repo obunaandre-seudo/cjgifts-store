@@ -15,7 +15,7 @@ function siteHeaderHTML(active) {
   <div class="announce">Gift-wrapped with care <span>◆</span> Secure bank transfer checkout</div>
   <header class="main-header">
     <div class="container top-row">
-      <a href="index.html" class="logo" aria-label="BPoint Gift Store home"><img class="logo-image" src="assets/images/bpoint-logo.svg" alt="" width="40" height="40">BPoint <span class="accent">Gifts</span></a>
+      <a href="index.html" class="logo" aria-label="BPoint Gift Store home"><img class="logo-image" src="assets/images/bpoint-logo.jpg" alt="" width="40" height="40">BPoint <span class="accent">Gifts</span></a>
       <nav class="main-nav" aria-label="Main">
         ${link('index.html','Home','home')}
         ${link('shop.html','Shop','shop')}
@@ -67,7 +67,7 @@ function siteFooterHTML() {
   <div class="footer-top">
     <div class="container footer-grid">
       <div class="footer-brand">
-        <a href="index.html" class="logo"><img class="logo-image" src="assets/images/bpoint-logo.svg" alt="" width="40" height="40">BPoint <span class="accent">Gifts</span></a>
+        <a href="index.html" class="logo"><img class="logo-image" src="assets/images/bpoint-logo.jpg" alt="" width="40" height="40">BPoint <span class="accent">Gifts</span></a>
         <p>Considered gifts for every occasion — curated with care, wrapped beautifully, delivered with pride.</p>
         <div class="social-row">
           <a href="#" title="Facebook" aria-label="Facebook">fb</a>
