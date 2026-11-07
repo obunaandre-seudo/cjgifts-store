@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1b0b33">
 <link rel="icon" type="image/svg+xml" href="assets/images/bpoint-logo.svg">
 <link rel="preload" as="image" href="assets/images/za.png" fetchpriority="high">
-<link rel="stylesheet" href="assets/css/style.css?v=4">
+<link rel="stylesheet" href="assets/css/style.css?v=6">
 </head>
 <body>
 
@@ -18,23 +18,28 @@
 
 <section class="hero">
   <div class="container">
-    <div class="hero-copy">
-      <div class="hero-badge">The gifting house</div>
-      <h1>Gifts worth <span class="shine">unwrapping</span>, for everyone you love.</h1>
-      <p class="lead">BPoint Gift Store brings together thoughtfully chosen gifts for every occasion — beautifully presented and delivered with care.</p>
-      <div class="hero-cta">
-        <a href="shop.html" class="btn btn-gold">Shop the collection</a>
-        <a href="gift-ideas.html" class="btn btn-outline">Gift ideas</a>
-      </div>
-      <div class="hero-stats">
-        <div><strong>2,500+</strong><span>Happy customers</span></div>
-        <div><strong>4.9★</strong><span>Average rating</span></div>
-        <div><strong>24/7</strong><span>Support</span></div>
+    <div class="hero-art">
+      <img src="assets/images/za.png" alt="Romantic gift arrangement with roses, a teddy bear, and gold-wrapped presents" width="1024" height="1536" fetchpriority="high" decoding="async">
+      <div class="hero-copy">
+        <div class="hero-badge">The gifting house</div>
+        <h1>Gifts worth <span class="shine">unwrapping</span>, for everyone you love.</h1>
+        <p class="lead">BPoint Gift Store brings together thoughtfully chosen gifts for every occasion — beautifully presented and delivered with care.</p>
+        <div class="hero-cta">
+          <a href="shop.html" class="btn btn-gold">Shop the collection</a>
+          <a href="gift-ideas.html" class="btn btn-outline">Gift ideas</a>
+        </div>
       </div>
     </div>
-    <div class="hero-visual">
-      <img class="hero-image" src="assets/images/za.png" alt="Romantic gift arrangement with roses, a teddy bear, and gold-wrapped presents" width="1024" height="1536" fetchpriority="high" decoding="async">
-      <div class="badge-offer">Up to<span class="gold">40% off</span>this week</div>
+    <div class="hero-visual" aria-label="Newest gift">
+      <a class="hero-product-link" href="shop.html" hidden>
+        <img class="hero-product-image" src="assets/images/za.png" alt="Shop the latest gifts" width="1024" height="1536" fetchpriority="high" decoding="async">
+        <span class="hero-product-label"><span>Latest addition</span><strong>Discover the newest gift</strong><span>Shop this gift →</span></span>
+      </a>
+      <div class="hero-product-empty">
+        <span>Latest addition</span>
+        <strong>New gifts are on their way</strong>
+        <a href="shop.html">Browse the collection →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -133,7 +138,7 @@
 
 <script src="assets/js/data.js?v=3"></script>
 <script src="assets/js/layout.js?v=3"></script>
-<script src="assets/js/app.js?v=3"></script>
+<script src="assets/js/app.js?v=4"></script>
 <script>
   renderLayout('home');
   initHomePage();

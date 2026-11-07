@@ -59,19 +59,19 @@ function skeletonGrid(n) {
 async function initHomePage() {
   await productsReady;
   const latestThree = Products.newArrivals(3);
-  document.querySelectorAll('.hero-visual .card-float').forEach((card, index) => {
-    const product = latestThree[index];
-    const image = card.querySelector('img');
-    if (!product || !image) { card.hidden = true; return; }
-    card.hidden = false;
-    image.src = product.images?.[0] || '';
-    image.alt = product.name;
-    card.setAttribute('role', 'link');
-    card.tabIndex = 0;
-    card.setAttribute('aria-label', `View ${product.name}`);
-    card.onclick = () => { window.location.href = `product.html?id=${encodeURIComponent(product.id)}`; };
-    card.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') card.click(); };
-  });
+  const heroProduct = latestThree[0];
+  const heroProductLink = document.querySelector('.hero-product-link');
+  const heroProductImage = document.querySelector('.hero-product-image');
+  const heroProductName = document.querySelector('.hero-product-label strong');
+  const heroProductEmpty = document.querySelector('.hero-product-empty');
+  if (heroProduct && heroProductLink && heroProductImage && heroProductName && heroProductEmpty) {
+    heroProductLink.href = `product.html?id=${encodeURIComponent(heroProduct.id)}`;
+    heroProductImage.src = heroProduct.images?.[0] || '';
+    heroProductImage.alt = heroProduct.name;
+    heroProductName.textContent = heroProduct.name;
+    heroProductLink.hidden = false;
+    heroProductEmpty.hidden = true;
+  }
   const promoImage = document.querySelector('.promo-img img');
   if (latestThree[0] && promoImage) {
     promoImage.src = latestThree[0].images?.[0] || promoImage.src;
