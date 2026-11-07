@@ -6,7 +6,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import { readStore, writeStore, buildOrderNumber } from './src/lib/store.js';
-import { prisma } from './src/lib/prisma.js';
+import { getDatabaseConfigurationError, prisma } from './src/lib/prisma.js';
 import { orderSchema, calculateOrderTotal, getShippingFee, validateCart, verifyPaystackReference } from './src/lib/validation.js';
 
 const app = express();
@@ -281,6 +281,9 @@ async function ensureConfiguredAdmin() {
 }
 
 app.use('/admin', async (req, res, next) => {
+  if (getDatabaseConfigurationError()) {
+    return res.status(503).send('Admin tools are unavailable until the database is configured.');
+  }
   if (req.path === '/login.html') return res.redirect('/login.html');
   if (!req.path.endsWith('.html')) return next();
   try {
@@ -293,6 +296,9 @@ app.use('/admin', async (req, res, next) => {
 
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
+  if (getDatabaseConfigurationError()) {
+    return errorResponse(res, 503, 'The database is not configured. Set DATABASE_URL_POOLED in the hosting environment.');
+  }
   next();
 });
 
